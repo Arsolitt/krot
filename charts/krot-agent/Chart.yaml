@@ -1,0 +1,6 @@
+apiVersion: v2
+name: krot-agent
+description: "Krot proxy node agents: sing-box supervised by the control plane"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

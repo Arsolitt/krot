@@ -1,0 +1,56 @@
+# Control-plane image. tag "" falls back to .Chart.AppVersion.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  tag: ""            # empty = .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+# Attach one or more image pull secrets to the pod, e.g.
+#   imagePullSecrets: [{name: ghcr-pull}]
+imagePullSecrets: []
+
+# Extra metadata merged onto the pod template.
+podAnnotations: {}
+podLabels: {}
+
+# Out-of-band Secret, envFrom-merged alongside the ConfigMap. It carries what
+# the ConfigMap must not: KROT_TOKEN_KEY, KROT_COOKIE_KEY, KROT_OIDC_CLIENT_ID,
+# KROT_OIDC_CLIENT_SECRET, KROT_DATABASE_URL, KROT_AGENT_TOKEN, and the
+# provider API token of the configured KROT_IDP (KROT_AUTHENTIK_TOKEN or
+# KROT_ZITADEL_TOKEN). Keys are the variable names themselves.
+secretName: krot-cp-secrets
+
+# Ingress is opt-in: enable it and set host to expose the portal, the
+# subscription endpoints and the public Happ routing routes. tlsSecret empty
+# renders the Ingress without a tls block.
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  tlsSecret: ""
+
+# Non-secret environment, rendered into the krot-cp-config ConfigMap.
+# KROT_IDP selects the identity provider (authentik or zitadel); only the
+# selected provider's URL/group/role keys are read.
+config:
+  KROT_IDP: authentik
+  KROT_BASE_URL: ""
+  KROT_OIDC_ISSUER: ""
+  KROT_AUTHENTIK_URL: ""
+  KROT_AUTHENTIK_GROUP: krot::vpn
+  KROT_AUTHENTIK_ADMIN_GROUP: krot::admins
+  KROT_ZITADEL_URL: ""
+  KROT_ZITADEL_PROJECT_ID: ""
+  KROT_ZITADEL_ROLE: vpn
+  KROT_ZITADEL_ADMIN_ROLE: vpn-admin
+  KROT_CACHE_TTL: 60s
+  KROT_GRACE: 24h
+  KROT_SESSION_TTL: 720h
+  KROT_SYNC_INTERVAL: 60s
+  KROT_PROFILE_TITLE: Krot VPN
+  KROT_PROFILE_SUPPORT_URL: ""
+  KROT_PROFILE_UPDATE_INTERVAL_HOURS: "24"
+  KROT_LISTEN_ADDR: :8080
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

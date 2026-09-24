@@ -1,0 +1,237 @@
+{
+  "log": {
+    "level": "error",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "local",
+        "tag": "dns-local"
+      },
+      {
+        "type": "tls",
+        "tag": "dns-remote",
+        "detour": "direct",
+        "server": "8.8.8.8",
+        "server_port": 853
+      }
+    ],
+    "rules": [
+      {
+        "rule_set": "geosite-category-ru",
+        "server": "dns-local"
+      }
+    ],
+    "final": "dns-remote",
+    "strategy": "prefer_ipv4"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "name": "arsolitt",
+          "uuid": "397fd10e-5e2c-4817-bd56-2d8e9a78d099",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "cdn.example.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "cdn.example.com",
+            "server_port": 443
+          },
+          "private_key": "Ma1yM8SNr1ZHZCWzy4HDrkpmaLbCWJCOPP01WoOhWIk",
+          "short_id": "8a07bf48dee3fecc"
+        }
+      },
+      "multiplex": {
+        "enabled": true
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "hy2-in",
+      "listen": "::",
+      "listen_port": 443,
+      "up_mbps": 1000,
+      "down_mbps": 1000,
+      "obfs": {
+        "type": "salamander",
+        "password": "dZHtPJO9bTmgR48hfGocE-7r1LfMqUUO"
+      },
+      "users": [
+        {
+          "name": "arsolitt",
+          "password": "AHjqg-limyU2fS7RKr2OiR7hKqLuvmum"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "cdn.example.com",
+        "alpn": "h3",
+        "certificate_path": "certs/cdn.example.com.crt",
+        "key_path": "certs/cdn.example.com.key"
+      },
+      "masquerade": {
+        "type": "proxy",
+        "url": "https://cdn.example.com",
+        "rewrite_host": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct",
+      "domain_resolver": "dns-local"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "rule_set": "geosite-category-ads-all",
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "ip_is_private": true,
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "rule_set": [
+          "geoip-ru",
+          "geosite-category-bank-ru",
+          "geosite-category-ecommerce-ru",
+          "geosite-category-entertainment-ru",
+          "geosite-category-gov-ru",
+          "geosite-category-media-ru",
+          "geosite-category-ru",
+          "geosite-category-travel-ru",
+          "geosite-dzen",
+          "geosite-ozon",
+          "geosite-mailru",
+          "geosite-mailru-group",
+          "russia-outside"
+        ],
+        "action": "reject",
+        "method": "drop"
+      }
+    ],
+    "rule_set": [
+      {
+        "type": "remote",
+        "tag": "geosite-category-ads-all",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-ads-all.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-category-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-category-bank-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-bank-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-category-ecommerce-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-ecommerce-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-category-entertainment-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-entertainment-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-category-gov-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-gov-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-category-media-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-media-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-category-travel-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-travel-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-dzen",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-dzen.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-ozon",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-ozon.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-mailru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-mailru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-mailru-group",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-mailru-group.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geoip-ru",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geoip-ru.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "russia-outside",
+        "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/itdog-russia_outside.srs",
+        "download_detour": "direct",
+        "update_interval": "24h0m0s"
+      }
+    ],
+    "final": "direct",
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-local"
+  }
+}

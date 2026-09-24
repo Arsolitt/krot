@@ -1,0 +1,63 @@
+# Node-agent image. tag "" falls back to .Chart.AppVersion.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+  tag: ""            # empty = .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+# Attach one or more image pull secrets to every agent pod, e.g.
+#   imagePullSecrets: [{name: ghcr-pull}]
+imagePullSecrets: []
+
+# Extra metadata merged onto every agent pod template.
+podAnnotations: {}
+podLabels: {}
+
+# Control plane the agents poll. Required: the agent fails fast ("KROT_CP_URL is
+# required") when it is empty. Reaching an in-cluster Service from the
+# hostNetwork pods also needs dnsPolicy: ClusterFirstWithHostNet below.
+cpUrl: ""
+pollInterval: 60s
+
+# Secret holding the registration token under key "token".
+agentTokenSecretName: krot-agent
+
+# Pod DNS policy. Agents are hostNetwork, so the cluster default (ClusterFirst)
+# resolves nothing; "Default" means the node's own resolv.conf and
+# "ClusterFirstWithHostNet" means cluster DNS (CoreDNS). Use the latter when
+# cpUrl points at an in-cluster Service, e.g.
+# http://krot-cp.<namespace>.svc.cluster.local:8080.
+dnsPolicy: Default
+
+# One Deployment per node. Inbounds are the gitops surface for what a node
+# serves; fields map 1:1 onto the agent.yaml spec POSTed to the control plane.
+#
+# nodes:
+#   - name: vpn1                          # server name in the control plane
+#     node: worker-1                      # k8s node hostname (nodeSelector)
+#     endpoint: vpn1.example.com          # DNS A -> node public IP
+#     routeProfile: proxy-server
+#     tolerations:                        # optional: taints to tolerate on the pinned node
+#       - {key: dedicated, operator: Exists, effect: NoSchedule}
+#     inbounds:
+#       - {tag: vless-in,     type: vless_reality, listenPort: 8443,  sni: cdn.example.com}
+#       - {tag: hy2-in,       type: hysteria2,     listenPort: 8443,  sni: cdn.example.com}
+#       - {tag: vless-ws-ddg, type: vless_ws,      listenPort: 9443, sni: front.example.org,
+#          publicEndpoint: front.example.org, publicPort: 443, wsPath: /up, originTls: false}
+nodes: []
+
+# CDN-fronted vless_ws inbounds get a Service and an Ingress route so a
+# reverse-proxy edge (DDoS-Guard) can reach the agent through the cluster
+# ingress instead of node ports. TLS terminates on the edge and again here.
+# tlsSecretName empty renders those Ingress objects without a tls block.
+wsIngress:
+  className: nginx
+  tlsSecretName: ""
+  readTimeout: "3600"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

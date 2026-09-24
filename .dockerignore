@@ -1,0 +1,16 @@
+*
+!cmd/krot-cp/
+!cmd/krot-agent/
+!internal/store/
+!internal/model/
+!internal/render/
+!internal/authentik/
+!internal/directory/
+!internal/zitadel/
+!internal/oidc/
+!internal/sub/
+!internal/web/
+!internal/cpapi/
+!internal/agentapi/
+!go.mod
+!go.sum

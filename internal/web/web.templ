@@ -1,0 +1,208 @@
+package web
+
+// layout is the shared page skeleton: head, stylesheet, htmx. The body
+// content arrives as a component parameter.
+templ layout(title string, body templ.Component) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/static/app.css"/>
+			<script src="/static/htmx.min.js"></script>
+		</head>
+		<body>
+			<main>
+				@body
+			</main>
+		</body>
+	</html>
+}
+
+// IndexData carries the user page state.
+type IndexData struct {
+	Username string
+	URL      string
+}
+
+// index is the portal front page: subscription URL with a copy button.
+templ index(d IndexData) {
+	@layout("Krot VPN", indexBody(d))
+}
+
+templ indexBody(d IndexData) {
+	<h1>Krot VPN</h1>
+	<p class="subtitle">Signed in as { d.Username }</p>
+	if d.URL == "" {
+		<div class="card">
+			<p>No subscription is provisioned for your account. Ask an administrator to add you to the VPN group.</p>
+		</div>
+	} else {
+		<h2>Subscription URL</h2>
+		<div class="card">
+			<div class="suburl">
+				<code id="suburl">{ d.URL }</code>
+				<button id="copy" data-url={ d.URL }>Copy</button>
+			</div>
+		</div>
+	}
+	<p><a href="/logout">Sign out</a></p>
+	<script>
+			document.getElementById('copy')?.addEventListener('click', async (ev) => {
+				const btn = ev.currentTarget;
+				try {
+					await navigator.clipboard.writeText(btn.dataset.url);
+					btn.textContent = 'Copied';
+					setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+				} catch {
+					btn.textContent = 'Copy failed';
+				}
+			});
+		</script>
+}
+
+// RoutingData carries the public routing-profile page state.
+type RoutingData struct {
+	Title    string
+	Deeplink string
+}
+
+// routing is the public Happ routing-profile page: the import link, a copy
+// button for the deeplink, and the raw JSON endpoint.
+templ routing(d RoutingData) {
+	@layout(d.Title+" routing", routingBody(d))
+}
+
+templ routingBody(d RoutingData) {
+	<h1>{ d.Title }</h1>
+	<p class="subtitle">Happ routing profile</p>
+	<div class="card">
+		<p>Russian services, private networks and local addresses go directly; ads are blocked; everything else goes through the tunnel.</p>
+		<p><a href={ d.Deeplink }>Add to Happ</a></p>
+		<div class="suburl">
+			<code id="deeplink">{ d.Deeplink }</code>
+			<button id="copy" data-url={ d.Deeplink }>Copy</button>
+		</div>
+		<p>Clients and scripts can also fetch the raw profile from <a href="/routing.json">/routing.json</a>.</p>
+		<p>Profile name: <span class="mono">{ d.Title }</span> — importing it again updates the profile instead of adding a second one.</p>
+	</div>
+	<script>
+			document.getElementById('copy')?.addEventListener('click', async (ev) => {
+				const btn = ev.currentTarget;
+				try {
+					await navigator.clipboard.writeText(btn.dataset.url);
+					btn.textContent = 'Copied';
+					setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+				} catch {
+					btn.textContent = 'Copy failed';
+				}
+			});
+		</script>
+}
+
+// AdminPanelData carries the admin fragment state.
+type AdminPanelData struct {
+	Servers  []ServerView
+	Users    []UserView
+	Sync     SyncView
+	Username string
+}
+
+// ServerView is one row of the servers table.
+type ServerView struct {
+	Name      string
+	Endpoint  string
+	Profile   string
+	Enabled   bool
+	Healthy   bool
+	Seen      string
+	Version   string
+	Users     int
+	ConfigErr string
+}
+
+// UserView is one row of the users table.
+type UserView struct {
+	Name   string
+	Active bool
+}
+
+// SyncView is the identity sync state.
+type SyncView struct {
+	LastSync string
+	Error    string
+}
+
+// admin is the admin page shell; the panel fragment refreshes via htmx.
+templ admin(d AdminPanelData) {
+	@layout("Krot VPN — admin", adminBody(d))
+}
+
+templ adminBody(d AdminPanelData) {
+	<h1>Krot VPN — admin</h1>
+	<p class="subtitle">Signed in as { d.Username } · <a href="/">user page</a> · <a href="/logout">sign out</a></p>
+	<div hx-get="/admin/panel" hx-trigger="load, every 30s" hx-swap="innerHTML">
+		@adminPanel(d)
+	</div>
+}
+
+// adminPanel is the auto-refreshing admin fragment.
+templ adminPanel(d AdminPanelData) {
+	<h2>Nodes</h2>
+	<div class="card">
+		<table>
+			<tr>
+				<th>Node</th>
+				<th>Route</th>
+				<th>Agent</th>
+				<th>Users</th>
+				<th>Last seen</th>
+				<th>State</th>
+			</tr>
+			for _, s := range d.Servers {
+				<tr>
+					<td>{ s.Name }<br/><span class="mono">{ s.Endpoint }</span></td>
+					<td class="mono">{ s.Profile }</td>
+					<td class="mono">{ s.Version }</td>
+					<td>{ fmtInt(s.Users) }</td>
+					<td class="mono">{ s.Seen }</td>
+					if !s.Enabled {
+						<td><span class="pill muted">disabled</span></td>
+					} else if s.Healthy {
+						<td><span class="pill ok">healthy</span></td>
+					} else {
+						<td><span class="pill bad">down</span></td>
+					}
+				</tr>
+				if s.ConfigErr != "" {
+					<tr><td></td><td colspan="5" class="err">{ s.ConfigErr }</td></tr>
+				}
+			}
+		</table>
+	</div>
+	<h2>Users</h2>
+	<div class="card">
+		<table>
+			<tr><th>Name</th><th>State</th></tr>
+			for _, u := range d.Users {
+				<tr>
+					<td>{ u.Name }</td>
+					if u.Active {
+						<td><span class="pill ok">active</span></td>
+					} else {
+						<td><span class="pill muted">revoked</span></td>
+					}
+				</tr>
+			}
+		</table>
+	</div>
+	<h2>Identity sync</h2>
+	<div class="card">
+		<p>Last sync: <span class="mono">{ d.Sync.LastSync }</span></p>
+		if d.Sync.Error != "" {
+			<p class="err">{ d.Sync.Error }</p>
+		}
+		<button hx-post="/admin/sync" hx-swap="none">Sync now</button>
+	</div>
+}

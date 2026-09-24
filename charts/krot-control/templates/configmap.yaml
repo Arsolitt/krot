@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krot-cp-config
+  labels:
+    app.kubernetes.io/name: krot-cp
+    app.kubernetes.io/instance: krot
+data:
+{{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+{{- end }}
