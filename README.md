@@ -300,9 +300,11 @@ Notes for `charts/krot-agent`:
 
 Pushing a `v*` tag runs the release workflow:
 
-1. Both images are built for `linux/amd64` and `linux/arm64` and pushed to
+1. Both images are built for `linux/amd64` and pushed to
    `ghcr.io/arsolitt/krot-cp` and `ghcr.io/arsolitt/krot-agent`, tagged with
-   the version and `latest`.
+   the version and `latest`. (The arm64 leg needed QEMU emulation and
+   dominated the release time; re-add `linux/arm64` to `platforms` in
+   `.github/workflows/release.yml` and the QEMU setup step to publish it.)
 2. A second job rewrites `version` and `appVersion` in both `Chart.yaml` files
    to the tag (without the `v`) and commits the bump to `main` — so
    `helm install` without `--set image.tag` follows the released version.
