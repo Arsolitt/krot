@@ -1,0 +1,28 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: krot-cp
+  labels:
+    app.kubernetes.io/name: krot-cp
+    app.kubernetes.io/instance: krot
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.tlsSecret }}
+  tls:
+    - hosts:
+        - {{ $.Values.ingress.host }}
+      secretName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: krot-cp
+                port:
+                  number: 8080
+{{- end }}

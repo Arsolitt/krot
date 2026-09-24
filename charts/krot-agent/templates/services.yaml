@@ -1,0 +1,29 @@
+{{- range $node := .Values.nodes }}
+{{- $ws := list }}
+{{- range $node.inbounds }}
+  {{- if eq .type "vless_ws" }}
+    {{- $ws = append $ws . }}
+  {{- end }}
+{{- end }}
+{{- if $ws }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: krot-agent-{{ $node.name }}
+  labels:
+    app.kubernetes.io/name: krot-agent
+    app.kubernetes.io/instance: krot-agent-{{ $node.name }}
+spec:
+  selector:
+    app.kubernetes.io/name: krot-agent
+    app.kubernetes.io/instance: krot-agent-{{ $node.name }}
+  ports:
+    {{- range $ws }}
+    - name: {{ .tag }}
+      port: {{ .listenPort }}
+      targetPort: {{ .listenPort }}
+      protocol: TCP
+    {{- end }}
+---
+{{- end }}
+{{- end }}

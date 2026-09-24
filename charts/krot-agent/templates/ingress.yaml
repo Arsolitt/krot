@@ -1,0 +1,38 @@
+{{- $cfg := .Values.wsIngress }}
+{{- range $node := .Values.nodes }}
+{{- range $in := $node.inbounds }}
+{{- if eq $in.type "vless_ws" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: krot-agent-{{ $node.name }}-{{ $in.tag }}
+  labels:
+    app.kubernetes.io/name: krot-agent
+    app.kubernetes.io/instance: krot-agent-{{ $node.name }}
+  annotations:
+    # Keep idle websockets alive; the default 60s kills quiet tunnels.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ $cfg.readTimeout | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ $cfg.readTimeout | quote }}
+spec:
+  ingressClassName: {{ $cfg.className }}
+  {{- with $cfg.tlsSecretName }}
+  tls:
+    - hosts:
+        - {{ $in.sni }}
+      secretName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ $in.sni }}
+      http:
+        paths:
+          - path: {{ $in.wsPath | default "/" }}
+            pathType: Prefix
+            backend:
+              service:
+                name: krot-agent-{{ $node.name }}
+                port:
+                  number: {{ $in.listenPort }}
+---
+{{- end }}
+{{- end }}
+{{- end }}

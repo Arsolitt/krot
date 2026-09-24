@@ -1,0 +1,4 @@
+build/
+dist/
+banks/
+.DS_Store

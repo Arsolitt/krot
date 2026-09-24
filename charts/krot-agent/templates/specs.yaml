@@ -1,0 +1,32 @@
+{{- range .Values.nodes }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krot-agent-spec-{{ .name }}
+  labels:
+    app.kubernetes.io/name: krot-agent
+    app.kubernetes.io/instance: krot-agent-{{ .name }}
+data:
+  agent.yaml: |
+    server: {{ .name }}
+    endpoint: {{ .endpoint }}
+    route_profile: {{ default "proxy-server" .routeProfile }}
+    inbounds:
+    {{- range .inbounds }}
+      - tag: {{ .tag }}
+        type: {{ .type }}
+        listen_port: {{ .listenPort }}
+        sni: {{ .sni }}
+        {{- with .publicEndpoint }}
+        public_endpoint: {{ . }}
+        {{- end }}
+        {{- with .publicPort }}
+        public_port: {{ . }}
+        {{- end }}
+        {{- if eq .type "vless_ws" }}
+        ws_path: {{ .wsPath }}
+        origin_tls: {{ .originTls }}
+        {{- end }}
+    {{- end }}
+---
+{{- end }}

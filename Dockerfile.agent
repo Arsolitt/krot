@@ -1,0 +1,56 @@
+# krot-agent: sing-box supervisor for proxy nodes.
+FROM golang:1.26.4-alpine AS build
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd/krot-agent/ cmd/krot-agent/
+COPY internal/model/ internal/model/
+COPY internal/render/ internal/render/
+COPY internal/agentapi/ internal/agentapi/
+
+RUN CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o /out/krot-agent ./cmd/krot-agent
+
+FROM alpine:3.20 AS fetch
+
+ARG TARGETARCH
+ENV SINGBOX_VERSION=1.13.18-extended-2.6.5
+RUN apk add --no-cache curl
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) echo "9cb62b5e83bd5d6a1f534b57a0f5bcb8de6044a524d193f9c389aeb3a60a2875  sing-box.tar.gz" > /sums ;; \
+      arm64) echo "560730fe1829db1aef6f9e923f0f4cbfb9699b535b203da9a9d24082f392aa70  sing-box.tar.gz" > /sums ;; \
+      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o sing-box.tar.gz \
+      "https://github.com/shtorm-7/sing-box-extended/releases/download/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-linux-${TARGETARCH}.tar.gz"; \
+    sha256sum -c /sums; \
+    tar -xzf sing-box.tar.gz; \
+    mv "sing-box-${SINGBOX_VERSION}-linux-${TARGETARCH}/sing-box" /usr/local/bin/sing-box
+
+FROM alpine:3.20
+
+LABEL org.opencontainers.image.title="krot-agent" \
+      org.opencontainers.image.description="Krot proxy node agent: renders and supervises sing-box" \
+      org.opencontainers.image.source="https://github.com/Arsolitt/krot" \
+      org.opencontainers.image.licenses="MIT"
+
+RUN apk add --no-cache ca-certificates libcap
+
+COPY --from=fetch /usr/local/bin/sing-box /usr/local/bin/sing-box
+COPY --from=build /out/krot-agent /app
+
+# File capabilities are the only way a non-root sing-box gets effective caps:
+# container capabilities.add lands in the bounding set only (CapEff=0), which
+# breaks SO_MARK on outbound UDP sockets. The chart's capabilities.add still
+# matters — it defines the bounding set that gates what file caps may raise.
+RUN setcap cap_net_raw,cap_net_bind_service=+ep /usr/local/bin/sing-box
+
+RUN addgroup -g 2222 -S krot && adduser -u 1111 -S -G krot krot \
+    && mkdir -p /etc/krot && chown krot:krot /etc/krot
+
+USER 1111:2222
+
+ENTRYPOINT ["/app"]

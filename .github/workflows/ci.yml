@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Generate templ sources
+        run: go tool templ generate ./internal/web
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.6.2
+      - name: Check templ formatting
+        run: go tool templ fmt -fail .
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.5
+        env:
+          POSTGRES_PASSWORD: krot
+          POSTGRES_DB: krot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready -U postgres
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      KROT_TEST_DATABASE_URL: postgres://postgres:krot@127.0.0.1:5432/krot?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Generate templ sources
+        run: go tool templ generate ./internal/web
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: make build
+
+  charts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Azure/setup-helm@v5
+      - name: Lint charts
+        run: helm lint charts/krot-control charts/krot-agent
+      - name: Render krot-control
+        run: helm template krot-cp charts/krot-control --set ingress.enabled=true --set ingress.host=vpn.example.com
+      - name: Render krot-agent
+        run: helm template krot-agent charts/krot-agent --set cpUrl=http://krot-cp:8080 --set nodes[0].name=vpn1 --set nodes[0].endpoint=vpn1.example.com --set nodes[0].inbounds[0].tag=vless-in --set nodes[0].inbounds[0].type=vless_reality --set nodes[0].inbounds[0].listenPort=8443 --set nodes[0].inbounds[0].sni=cdn.example.com

@@ -1,0 +1,18 @@
+{
+  "profile": {
+    "base_url": "https://vpn.example.com",
+    "title": "Krot VPN",
+    "support_url": "https://t.me/arsolitt",
+    "update_interval_hours": 24
+  },
+  "users": [
+    {
+      "name": "arsolitt",
+      "token": "20652378081d562f33a0098ce53612a1",
+      "links": [
+        "hysteria2://AHjqg-limyU2fS7RKr2OiR7hKqLuvmum@srv-1.example.com:443?alpn=h3\u0026obfs=salamander\u0026obfs-password=dZHtPJO9bTmgR48hfGocE-7r1LfMqUUO\u0026pinSHA256=sha256%2FHdDtNOYbrezybvBZq9CjXjY6QAw8apos4mhNsGqCw9Q\u0026sni=cdn.example.com#srv-1-hysteria2",
+        "vless://397fd10e-5e2c-4817-bd56-2d8e9a78d099@srv-1.example.com:443?flow=xtls-rprx-vision\u0026fp=chrome\u0026pbk=Gs3SCdZr9mwSoaG4BwBINH074ZGayszZraPKhtaNA2w\u0026security=reality\u0026sid=8a07bf48dee3fecc\u0026sni=cdn.example.com\u0026type=tcp#srv-1-vless"
+      ]
+    }
+  ]
+}
