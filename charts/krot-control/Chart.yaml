@@ -2,5 +2,5 @@ apiVersion: v2
 name: krot-control
 description: "Krot control plane: portal, subscriptions, agent API, identity sync"
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.1.1
+appVersion: "0.1.1"
