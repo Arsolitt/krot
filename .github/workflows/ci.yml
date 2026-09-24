@@ -20,7 +20,7 @@ jobs:
         run: go tool templ generate ./internal/web
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6.2
+          version: v2.13.2
       - name: Check templ formatting
         run: go tool templ fmt -fail .
 
