@@ -13,11 +13,6 @@
 version: "2"
 
 issues:
-  # Skip generated templ sources: templ unconditionally writes a
-  # "templ: version" comment above the package clause, which godoclint
-  # would otherwise count as a second package godoc.
-  exclude-files:
-    - .*_templ\.go
   # Maximum count of issues with the same text.
   # Set to 0 to disable.
   # Default: 3
@@ -458,6 +453,11 @@ linters:
       os-temp-dir: true
 
   exclusions:
+    # Skip generated templ sources: templ unconditionally writes a
+    # "templ: version" comment above the package clause, which godoclint
+    # would otherwise count as a second package godoc.
+    paths:
+      - .*_templ\.go
     # Log a warning if an exclusion rule is unused.
     # Default: false
     warn-unused: true
