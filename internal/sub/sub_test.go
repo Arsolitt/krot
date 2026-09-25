@@ -128,6 +128,24 @@ func TestHandleSubOmitsRoutingHeaderWhenUnset(t *testing.T) {
 	}
 }
 
+// TestHandleSubOmitsSupportURLHeaderWhenUnset pins the same rule for the
+// support contact: an empty header advertises a support channel and gives the
+// client nothing to open.
+func TestHandleSubOmitsSupportURLHeaderWhenUnset(t *testing.T) {
+	server, user := testEnvWithProfile(Profile{Title: "Krot VPN"}, fakeAuthz{allowed: true})
+
+	rec := httptest.NewRecorder()
+	server.Handler().
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sub/"+Token(tokenKey32, user.Subject), nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	if vals := rec.Header().Values("support-url"); len(vals) != 0 {
+		t.Errorf("support-url header = %q, want absent", vals)
+	}
+}
+
 func TestHandleSubDenials(t *testing.T) {
 	server, user := testEnv(fakeAuthz{allowed: false})
 	token := Token(tokenKey32, user.Subject)

@@ -215,7 +215,11 @@ func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("profile-title", s.profile.Title)
 	w.Header().Set("profile-update-interval", strconv.Itoa(s.profile.UpdateIntervalHours))
-	w.Header().Set("support-url", s.profile.SupportURL)
+	// Advertised only when configured: an empty support-url header tells the
+	// client there is a support contact and gives it nothing to open.
+	if s.profile.SupportURL != "" {
+		w.Header().Set("support-url", s.profile.SupportURL)
+	}
 	// Advertised only when a profile exists: an empty routing header would
 	// push clients onto Happ's built-in Default profile.
 	if s.profile.RoutingURI != "" {

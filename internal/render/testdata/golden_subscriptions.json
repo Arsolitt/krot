@@ -2,7 +2,7 @@
   "profile": {
     "base_url": "https://vpn.example.com",
     "title": "Krot VPN",
-    "support_url": "https://",
+    "support_url": "",
     "update_interval_hours": 24
   },
   "users": [

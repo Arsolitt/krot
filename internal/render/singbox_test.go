@@ -2,19 +2,30 @@ package render
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Arsolitt/cheburbox/generate"
 
 	"github.com/Arsolitt/krot/internal/model"
 )
 
-// v1 golden values (from testdata fixtures): user credentials, reality keys
-// and the certificate backing the srv-1 hysteria2 inbound.
+// v1 golden values (from testdata fixtures): user credentials and reality keys.
+// The hysteria2 certificate is generated per test run instead of being checked
+// in - a private key in the repository trips secret scanners for no benefit,
+// and the pin is derived from the generated certificate rather than compared
+// against a stored one.
 const (
 	goldenUserName     = "arsolitt"
 	goldenUserVLESS    = "397fd10e-5e2c-4817-bd56-2d8e9a78d099"
@@ -23,9 +34,6 @@ const (
 	goldenRealityPub   = "Gs3SCdZr9mwSoaG4BwBINH074ZGayszZraPKhtaNA2w"
 	goldenRealitySID   = "8a07bf48dee3fecc"
 	goldenHy2Obfs      = "dZHtPJO9bTmgR48hfGocE-7r1LfMqUUO"
-	goldenHy2CertFile  = "cdn.example.com.crt"
-	goldenHy2KeyFile   = "cdn.example.com.key"
-	goldenHy2Pin       = "sha256/HdDtNOYbrezybvBZq9CjXjY6QAw8apos4mhNsGqCw9Q"
 	goldenEndpointSNI  = "cdn.example.com"
 	normalizedCertPath = "certs/<normalized>"
 	realityHandshakePt = 443
@@ -33,6 +41,44 @@ const (
 	wsListenPort       = 8443
 	wsPublicPort       = 443
 )
+
+// goldenCert generates a self-signed certificate for goldenEndpointSNI and
+// returns its PEM pair plus the pin the renderer derives from it.
+func goldenCert(t *testing.T) ([]byte, []byte, string) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: goldenEndpointSNI},
+		DNSNames:     []string{goldenEndpointSNI},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IsCA:         true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+
+	pin, err := generate.ComputePinSHA256(certPEM)
+	if err != nil {
+		t.Fatalf("pin generated cert: %v", err)
+	}
+	return certPEM, keyPEM, pin
+}
 
 // goldenUsers is the v1 user list.
 func goldenUsers() []model.User {
@@ -44,25 +90,11 @@ func goldenUsers() []model.User {
 }
 
 // goldenInbounds rebuilds the srv-1 inbound rows; reality keys come from the
-// golden config itself, the hy2 certificate from the golden cert files.
+// golden config itself, the hy2 certificate is generated for this run.
 func goldenInbounds(t *testing.T) []model.Inbound {
 	t.Helper()
 
-	certPEM, err := os.ReadFile(filepath.Join("testdata", goldenHy2CertFile))
-	if err != nil {
-		t.Fatalf("read golden cert: %v", err)
-	}
-	keyPEM, err := os.ReadFile(filepath.Join("testdata", goldenHy2KeyFile))
-	if err != nil {
-		t.Fatalf("read golden key: %v", err)
-	}
-	pin, err := generate.ComputePinSHA256(certPEM)
-	if err != nil {
-		t.Fatalf("pin golden cert: %v", err)
-	}
-	if pin != goldenHy2Pin {
-		t.Fatalf("golden cert pin = %q, want %q (fixture drift)", pin, goldenHy2Pin)
-	}
+	certPEM, keyPEM, pin := goldenCert(t)
 
 	return []model.Inbound{
 		{

@@ -1,12 +1,8 @@
 // Rule-sets are mirrored into a single repo (Arsolitt/sing-box-rules, rule-set
-// branch) that exists on two backends with identical filenames:
-//   - GitHub  — public CDN, reachable from anywhere (default source)
-//   - GitLab  — self-hosted at gitlab.example.com, only worth using from
-//               hosts that can reach it directly (home clients)
+// branch), served from the public GitHub CDN so it is reachable from anywhere.
 // Tags are kept identical to the upstream naming because they are referenced by
 // the routing rules; only the download base URL and detour vary per caller.
 local githubBase = 'https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/';
-local gitlabBase = 'https://gitlab.example.com/Arsolitt/sing-box-rules/-/raw/rule-set/';
 
 local rule(tag, filename, detour, base) = {
   type: 'remote',
@@ -27,10 +23,8 @@ local itdog(tag, detour, base, filename=null) =
 local arsolitt(name, detour, base) = rule(name, name, detour, base);
 
 {
-  // Download bases exposed so call sites can opt into the self-hosted mirror,
-  // e.g. rulesets.client(base=rulesets.gitlab).
+  // Download base exposed so call sites can pick the source explicitly.
   github:: githubBase,
-  gitlab:: gitlabBase,
 
   ads(detour, base=githubBase):: [sagernet('category-ads-all', detour, base)],
 

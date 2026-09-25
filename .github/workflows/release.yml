@@ -29,7 +29,6 @@ concurrency: krot-release
 
 env:
   HELM_VERSION: 4.2.4
-  CHART_RELEASER_VERSION: v1.8.1
 
 jobs:
   # The tag is resolved here as well as in ci.yml: job outputs do not cross
@@ -152,16 +151,6 @@ jobs:
             echo "::notice::packaged $(basename "$package") from the tag"
           done
 
-      # The action installs the pinned `cr` binary only: its own release path
-      # packages "charts changed since the previous tag", which is not the
-      # contract, and with packaging skipped its script dies on an unbound
-      # variable. `cr index` is what is needed from the binary.
-      - name: Install chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
-        with:
-          version: ${{ env.CHART_RELEASER_VERSION }}
-          install_only: true
-
       # The release is created here rather than by `cr upload`, because `cr`
       # cannot create a pre-release and a candidate that exists unflagged - even
       # for the seconds between two steps - is a release consumers see as
@@ -194,20 +183,54 @@ jobs:
           gh release upload "$TAG" .cr-release-packages/*.tgz --clobber
           echo "::notice::$TAG published from the ${CHANNEL} track with the CHANGELOG.md body"
 
-      # `cr index` reads the release and its assets back out of GitHub and
-      # rewrites `index.yaml` on gh-pages; the packages it indexes are the ones
-      # this job built. It keeps its local copy of the index at
-      # `.cr-index/index.yaml` and does not create the directory, so a missing
-      # `.cr-index` fails after the release is already published.
+      # The chart repository index is generated with `helm repo index` rather
+      # than chart-releaser: `cr` looks releases up by a `<chart>-<version>` tag
+      # name, and this repository publishes one release per version for both
+      # charts under a `release-<version>` tag. The index is merged with the one
+      # already on gh-pages, so every published version stays listed, and the
+      # asset URLs point at the release this job just created.
       - name: Publish the chart repository index
         env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-tag.outputs.tag }}
         run: |
           set -euo pipefail
           owner="${GITHUB_REPOSITORY%%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
+          base="https://github.com/${owner}/${repo}/releases/download/${TAG}"
+
+          # The existing index, if the branch already carries one: merging keeps
+          # the versions published before this release in the repository.
+          rm -rf .cr-index
           mkdir -p .cr-index
-          cr index -o "$owner" -r "$repo" --push
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
+            git fetch --quiet origin gh-pages
+            if git show FETCH_HEAD:index.yaml > .cr-index/index.yaml 2>/dev/null; then
+              echo "::notice::merging into the index already on gh-pages"
+            else
+              rm -f .cr-index/index.yaml
+              echo "::notice::gh-pages carries no index.yaml yet; starting one"
+            fi
+          fi
+
+          helm repo index .cr-release-packages --url "$base" --merge .cr-index/index.yaml
+          mv .cr-release-packages/index.yaml .cr-index/index.yaml
+
+          # gh-pages holds the index and nothing else; .nojekyll keeps GitHub
+          # Pages from running Jekyll over it.
+          worktree="${RUNNER_TEMP}/gh-pages"
+          rm -rf "$worktree"
+          git worktree add --quiet --detach "$worktree" origin/gh-pages
+          cp .cr-index/index.yaml "$worktree/index.yaml"
+          touch "$worktree/.nojekyll"
+          git -C "$worktree" add index.yaml .nojekyll
+          if git -C "$worktree" diff --cached --quiet; then
+            echo "::notice::the index is unchanged; nothing to publish"
+          else
+            git -C "$worktree" commit --quiet --message "chore(index): publish ${TAG} [skip ci]"
+            git -C "$worktree" push --quiet origin HEAD:gh-pages
+            echo "::notice::index.yaml published for ${TAG}"
+          fi
 
       # The tag is the source of truth, so the branch records the release after
       # the fact: a commit whose only change is the version lines. A push made

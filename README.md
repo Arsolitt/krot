@@ -167,7 +167,7 @@ answers `503` until it succeeds.
 | `KROT_SESSION_TTL` | `720h` | no | Portal session lifetime. |
 | `KROT_SYNC_INTERVAL` | `60s` | no | Interval between directory syncs (`Members`). |
 | `KROT_PROFILE_TITLE` | `Krot VPN` | no | Profile name in the subscription headers and in the Happ routing profile. |
-| `KROT_PROFILE_SUPPORT_URL` | `https://` | no | `support-url` header value of a subscription response. |
+| `KROT_PROFILE_SUPPORT_URL` | — (empty) | no | `support-url` header value of a subscription response. Empty sends no header. |
 | `KROT_PROFILE_UPDATE_INTERVAL_HOURS` | `24` | no | `profile-update-interval` header value, in hours. |
 | `KROT_LISTEN_ADDR` | `:8080` | no | HTTP listen address. |
 

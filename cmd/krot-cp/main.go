@@ -58,7 +58,7 @@ const (
 	defaultZitadelAdminRole    = "vpn-admin"
 
 	defaultProfileTitle    = "Krot VPN"
-	defaultProfileSupport  = "https://"
+	defaultProfileSupport  = ""
 	defaultUpdateIntervalH = 24
 )
 
