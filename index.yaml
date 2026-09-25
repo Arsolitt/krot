@@ -3,9 +3,9 @@ entries:
   krot-agent:
   - apiVersion: v2
     appVersion: 0.1.1
-    created: "2026-09-25T19:11:35.42604537Z"
+    created: "2026-09-25T19:21:03.216895413Z"
     description: 'Krot proxy node agents: sing-box supervised by the control plane'
-    digest: da1cf864a5e2eb76d81bfc35db72c65e11559c5dfe9b7bf69cdf905c175ca416
+    digest: bf620d576934fd27d296284603a60f940c90a96f57182ff8605bf69a04d79eea
     name: krot-agent
     type: application
     urls:
@@ -14,12 +14,12 @@ entries:
   krot-control:
   - apiVersion: v2
     appVersion: 0.1.1
-    created: "2026-09-25T19:11:35.426362019Z"
+    created: "2026-09-25T19:21:03.217236931Z"
     description: 'Krot control plane: portal, subscriptions, agent API, identity sync'
-    digest: d71836a6296ddbce6ccbdca88bc27dc5a21d198dd8eef32822d5158e02de3b6f
+    digest: 7d671a67de992c949eab91dc35d46084d33848aafd45fa5b4c1ba7c7c9d9955a
     name: krot-control
     type: application
     urls:
     - https://github.com/Arsolitt/krot/releases/download/release-0.1.1/krot-control-0.1.1.tgz
     version: 0.1.1
-generated: "2026-09-25T19:11:35.425602926Z"
+generated: "2026-09-25T19:21:03.216482603Z"
