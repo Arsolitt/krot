@@ -414,3 +414,8 @@ after editing `internal/web/web.templ` (`make build` does it too; the generated
 The toolchain is pinned to go1.26.4 by `GOTOOLCHAIN` in the Makefile: the
 `go-json-experiment` alias used by the sing-box option types breaks on newer
 Go releases.
+
+## License
+
+krot is released under the GNU Affero General Public License v3.0 (AGPL-3.0).
+See [LICENSE](LICENSE) for the full text.

@@ -27,7 +27,7 @@ FROM alpine:3.20
 LABEL org.opencontainers.image.title="krot-cp" \
       org.opencontainers.image.description="Krot control plane: portal, subscriptions, agent API, identity sync" \
       org.opencontainers.image.source="https://github.com/Arsolitt/krot" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 COPY --from=build /out/krot-cp /app
 
