@@ -1,0 +1,14 @@
+# MUST be rejected: an empty repository renders `image: ":0.1.1"`, which the
+# kubelet refuses with InvalidImageName - the pod never starts and the error
+# names the image, not the value that produced it.
+image:
+  repository: ""
+
+secretName: krot-cp-secrets
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

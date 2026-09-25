@@ -1,0 +1,22 @@
+# MUST be rejected: 'vless-reality' is not an inbound type the agent renders.
+# The type decides which fields are meaningful and which sing-box inbound is
+# built, so a value outside the set is a spec the agent's own validation refuses
+# at runtime - the schema refuses it at render time instead.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-in, type: vless-reality, listenPort: 8443, sni: cdn.ci.example}
+
+wsIngress:
+  className: nginx
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

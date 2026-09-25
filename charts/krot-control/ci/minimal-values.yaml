@@ -1,0 +1,31 @@
+# Scenario: smallest supported install.
+#
+# Rendered by the `lint` CI job and validated with kubeconform: the default
+# image tag (the chart appVersion), no Ingress, no pull secrets, no extra
+# metadata. This is what `helm install krot-control charts/krot-control` with no
+# values produces, so it is the configuration most users get.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  tag: ""
+  pullPolicy: IfNotPresent
+
+secretName: krot-cp-secrets
+
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  tlsSecret: ""
+
+config:
+  KROT_IDP: authentik
+  KROT_BASE_URL: https://vpn.ci.example
+  KROT_OIDC_ISSUER: https://idp.ci.example
+  KROT_AUTHENTIK_URL: https://auth.ci.example
+  KROT_AUTHENTIK_GROUP: krot::vpn
+  KROT_AUTHENTIK_ADMIN_GROUP: krot::admins
+  KROT_LISTEN_ADDR: :8080
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

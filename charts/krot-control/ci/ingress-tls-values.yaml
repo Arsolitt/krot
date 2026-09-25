@@ -1,0 +1,39 @@
+# Scenario: the portal published through an Ingress with TLS.
+#
+# Exercises the ingress branch: the Ingress renders only when enabled, the TLS
+# block only when tlsSecret is non-empty, and the host is required. The
+# annotations ride along because they are the operator's own (cert-manager
+# issues the certificate the tlsSecret names; the chart creates none).
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-pull
+
+podAnnotations:
+  ci.example/note: rendered
+podLabels:
+  ci.example/tier: edge
+
+secretName: krot-cp-secrets
+
+ingress:
+  enabled: true
+  className: nginx
+  host: vpn.ci.example
+  tlsSecret: vpn-ci-example-tls
+
+config:
+  KROT_IDP: authentik
+  KROT_BASE_URL: https://vpn.ci.example
+  KROT_OIDC_ISSUER: https://idp.ci.example
+  KROT_AUTHENTIK_URL: https://auth.ci.example
+  KROT_AUTHENTIK_GROUP: krot::vpn
+  KROT_AUTHENTIK_ADMIN_GROUP: krot::admins
+  KROT_LISTEN_ADDR: :8080
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

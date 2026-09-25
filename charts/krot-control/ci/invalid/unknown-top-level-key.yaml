@@ -1,0 +1,17 @@
+# MUST be rejected: 'ingres' is a typo for 'ingress'. Unknown top-level keys are
+# the main failure mode the schema catches, because Helm silently ignores them -
+# the release would install with no Ingress at all and no error.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+
+secretName: krot-cp-secrets
+
+ingres:
+  enabled: true
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

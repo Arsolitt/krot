@@ -1,0 +1,43 @@
+# Scenario: one node serving all three inbound kinds, pinned to a node.
+#
+# Exercises the per-node render: a Deployment, a spec ConfigMap, and - for the
+# vless_ws inbound only - a Service and an Ingress. The vless_reality and
+# hysteria2 inbounds get no Service: they are reached on node ports, which is
+# what hostNetwork is for.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+cpUrl: http://krot-cp:8080
+pollInterval: 60s
+agentTokenSecretName: krot-agent
+dnsPolicy: ClusterFirstWithHostNet
+
+nodes:
+  - name: vpn1
+    node: worker-1
+    endpoint: vpn1.ci.example
+    routeProfile: proxy-server
+    tolerations:
+      - {key: dedicated, operator: Exists, effect: NoSchedule}
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+      - {tag: hy2-in, type: hysteria2, listenPort: 8443, sni: cdn.ci.example}
+      - tag: vless-ws-ddg
+        type: vless_ws
+        listenPort: 9443
+        sni: front.ci.example
+        publicEndpoint: front.ci.example
+        publicPort: 443
+        wsPath: /up
+        originTls: false
+
+wsIngress:
+  className: nginx
+  tlsSecretName: front-ci-example-tls
+  readTimeout: "3600"
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

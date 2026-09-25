@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "krot-agent chart values",
+  "description": "Validated against the krot-agent chart templates. The nodes list is the gitops surface for what a node serves: every field maps 1:1 onto the agent.yaml spec POSTed to the control plane, so a shape the agent would reject is refused here instead.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "image",
+    "cpUrl",
+    "agentTokenSecretName",
+    "nodes",
+    "wsIngress",
+    "resources"
+  ],
+  "definitions": {
+    "quantity": {
+      "description": "Kubernetes resource quantity: a number or a string with an optional suffix (m, Mi, Gi, ...).",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?(n|u|m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$"
+        }
+      ]
+    },
+    "stringMap": {
+      "description": "String-to-string map, as required by Kubernetes labels and annotations.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "imageSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository"
+      ],
+      "properties": {
+        "repository": {
+          "description": "Image repository. An empty one renders `image: \":<tag>\"`, which the kubelet refuses with InvalidImageName.",
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "description": "Rendered verbatim after the ':' separator; empty falls back to .Chart.AppVersion, which is why it may be empty here.",
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "resourcesSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requests",
+        "limits"
+      ],
+      "properties": {
+        "requests": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/quantity"
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/quantity"
+          }
+        }
+      }
+    },
+    "inboundSpec": {
+      "description": "One inbound a node serves. The type decides which fields are meaningful: vless_ws is the only one that gets a Service and an Ingress, and the only one that reads publicEndpoint/publicPort/wsPath/originTls.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tag",
+        "type",
+        "listenPort",
+        "sni"
+      ],
+      "properties": {
+        "tag": {
+          "description": "Inbound tag; also the Service port name for a vless_ws inbound, so it has to be a name Kubernetes accepts.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "type": {
+          "description": "Inbound kind the agent renders. Anything else is refused by the agent's own spec validation.",
+          "type": "string",
+          "enum": [
+            "vless_reality",
+            "hysteria2",
+            "vless_ws"
+          ]
+        },
+        "listenPort": {
+          "description": "Port the inbound binds on the node.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "sni": {
+          "description": "TLS server name the inbound presents; also the Ingress rule host for a vless_ws inbound, so it has to be a bare hostname.",
+          "type": "string",
+          "minLength": 1
+        },
+        "publicEndpoint": {
+          "description": "Public DNS name a CDN edge reaches the inbound on (vless_ws).",
+          "type": "string"
+        },
+        "publicPort": {
+          "description": "Public port a CDN edge reaches the inbound on (vless_ws).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "wsPath": {
+          "description": "WebSocket path the inbound serves (vless_ws); also the Ingress path.",
+          "type": "string",
+          "pattern": "^/"
+        },
+        "originTls": {
+          "description": "Whether the inbound terminates TLS itself behind the edge (vless_ws).",
+          "type": "boolean"
+        }
+      }
+    },
+    "nodeSpec": {
+      "description": "One node: a Deployment, a spec ConfigMap, and (for vless_ws inbounds) a Service and an Ingress.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "endpoint",
+        "inbounds"
+      ],
+      "properties": {
+        "name": {
+          "description": "Server name in the control plane; also the resource name suffix, so it has to be a name Kubernetes accepts.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "node": {
+          "description": "Kubernetes node hostname the pod is pinned to (nodeSelector).",
+          "type": "string"
+        },
+        "endpoint": {
+          "description": "Public DNS name pointing at the node's IP.",
+          "type": "string",
+          "minLength": 1
+        },
+        "routeProfile": {
+          "description": "Routing profile compiled into the agent.",
+          "type": "string",
+          "minLength": 1
+        },
+        "tolerations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "inbounds": {
+          "description": "What the node serves. An empty list renders a node with no listener, which is a valid drained state but never a useful one - the agent would serve nothing.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/inboundSpec"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "image": {
+      "$ref": "#/definitions/imageSpec"
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "podAnnotations": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "podLabels": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "cpUrl": {
+      "description": "Control-plane base URL. The key is required; an empty value is refused by the template, because the agent fails fast with 'KROT_CP_URL is required' and a pod that never starts is worse than a failed render.",
+      "type": "string"
+    },
+    "pollInterval": {
+      "description": "Desired-state poll interval, as a Go duration string.",
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h)([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))*$"
+    },
+    "agentTokenSecretName": {
+      "description": "Secret holding the registration token under key 'token'. The key is required; an empty name is refused by the template, because it renders a secretKeyRef the API server refuses.",
+      "type": "string"
+    },
+    "dnsPolicy": {
+      "description": "Pod DNS policy. The agent pods are hostNetwork, so ClusterFirst resolves nothing; Default means the node's resolv.conf and ClusterFirstWithHostNet means cluster DNS.",
+      "type": "string",
+      "enum": [
+        "Default",
+        "ClusterFirst",
+        "ClusterFirstWithHostNet",
+        "None"
+      ]
+    },
+    "nodes": {
+      "description": "One Deployment per entry. An empty list renders no workload at all, which is a valid way to install the chart before any node is declared.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/nodeSpec"
+      }
+    },
+    "wsIngress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "className"
+      ],
+      "properties": {
+        "className": {
+          "type": "string"
+        },
+        "tlsSecretName": {
+          "description": "TLS secret name; empty renders those Ingress objects without a tls block.",
+          "type": "string"
+        },
+        "readTimeout": {
+          "description": "nginx proxy read/send timeout for the websocket inbounds, in seconds.",
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        }
+      }
+    },
+    "resources": {
+      "$ref": "#/definitions/resourcesSpec"
+    }
+  }
+}

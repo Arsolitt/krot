@@ -15,7 +15,7 @@ spec:
       secretName: {{ . }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host }}
+    - host: {{ required "ingress.host is required when ingress.enabled is true: an empty host renders a rule the API server refuses" .Values.ingress.host }}
       http:
         paths:
           - path: /

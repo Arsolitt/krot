@@ -298,20 +298,68 @@ Notes for `charts/krot-agent`:
 
 ## Release flow
 
-Pushing a `v*` tag runs the release workflow:
+A release exists only because a tag was pushed, and the tag carries the version
+— nothing in the tree is bumped by hand. Both tracks are cut from `main` and the
+tag is created by [`hack/release.sh`](hack/release.sh):
 
-1. Both images are built for `linux/amd64` and pushed to
-   `ghcr.io/arsolitt/krot-cp` and `ghcr.io/arsolitt/krot-agent`, tagged with
-   the version and `latest`. (The arm64 leg needed QEMU emulation and
-   dominated the release time; re-add `linux/arm64` to `platforms` in
-   `.github/workflows/release.yml` and the QEMU setup step to publish it.)
-2. A second job rewrites `version` and `appVersion` in both `Chart.yaml` files
-   to the tag (without the `v`) and commits the bump to `main` — so
-   `helm install` without `--set image.tag` follows the released version.
+| Track | Tag | GitHub release |
+| --- | --- | --- |
+| stable | `release-0.2.0` | normal, takes "Latest" |
+| release candidate | `release-0.2.0-rc.1` | pre-release, never "Latest" |
 
-`ci` runs on `main` pushes and pull requests: `golangci-lint`, `go tool templ
-fmt -fail .`, `go vet ./...`, `go test ./...` (against a PostgreSQL service),
-`make build`, and `helm lint` plus template renders of both charts.
+1. Write the section the release body comes from: `## [<version>]` in
+   [`CHANGELOG.md`](CHANGELOG.md). A candidate reuses the section of the version
+   it is a candidate of, so `0.2.0-rc.1` publishes `## [0.2.0]`.
+2. Cut the tag with `hack/release.sh <version>` (for example
+   `hack/release.sh 0.2.0-rc.1`). It refuses a version of any other shape, a
+   missing CHANGELOG section, a dirty working tree, a `HEAD` that is not the tip
+   of `origin/main`, and a tag that exists locally or on `origin`;
+   `hack/release.sh --check <version>` validates without pushing.
+3. Pushing the tag starts the pipeline. `ci` runs `lint`, `test`, `charts`,
+   `schema` and `release-tag` — the last one resolves the version, the channel
+   and the section and refuses a tag that is not an ancestor of `origin/main`.
+   `release` then builds and pushes `ghcr.io/arsolitt/krot-cp` and
+   `ghcr.io/arsolitt/krot-agent` for `linux/amd64`, packages both charts at the
+   tag's version (`helm package --version`), creates the GitHub release with the
+   CHANGELOG section as its body, and publishes the chart repository index on
+   the `gh-pages` branch.
+4. The job then records the released version in both `charts/*/Chart.yaml` on
+   `main`, in a `chore(release): record <tag> [skip ci]` commit — the tag is the
+   source of truth and the branch follows it.
+5. Consumers pick the version up with `helm repo update`. A candidate is
+   opt-in: it stays invisible to an unqualified `helm install` and is reached
+   with `helm search repo krot/krot-control --versions --devel` and
+   `helm install … --version 0.2.0-rc.1`.
+
+Nothing else is a release: a merge publishes nothing, so documentation, CI and
+even a chart change are safe until a tag is pushed.
+
+The images are built for `linux/amd64` only: the arm64 leg needed QEMU emulation
+and dominated the release wall-clock time. Re-add `linux/arm64` to `platforms`
+in [`.github/workflows/release.yml`](.github/workflows/release.yml) and the
+`docker/setup-qemu-action` step to publish it.
+
+### CI gates
+
+Every pull request runs five jobs, and the first four are the ones worth marking
+as required checks:
+
+| Job | What it proves |
+| --- | --- |
+| `lint` | `golangci-lint` and `go tool templ fmt -fail .` over the Go tree. |
+| `test` | `go vet ./...`, the test suite against a PostgreSQL service, and `make build`. |
+| `charts` | `helm lint --strict` for both charts and every scenario, then `helm template` + `kubeconform -strict` for the defaults and every scenario on the Kubernetes versions in the workflow's `env:` block. |
+| `schema` | `charts/*/ci/invalid/*.yaml` is still refused by `values.schema.json`, `charts/*/ci/invalid-render/*.yaml` is still refused by the chart's own template guards, and every supported scenario still renders. |
+| `release-tag` | A `release-*` tag push only: the version shape, the CHANGELOG section and the branch the tag was cut from. |
+
+The chart fixtures come in three categories, one meaning each — a fixture in the
+wrong folder makes the job that owns it fail, not pass:
+
+| Folder | What the fixture must do | Owning job |
+| --- | --- | --- |
+| `charts/*/ci/*-values.yaml` | render `helm template` | `charts`, `schema` |
+| `charts/*/ci/invalid/*.yaml` | be rejected by `values.schema.json` | `schema` |
+| `charts/*/ci/invalid-render/*.yaml` | be rejected by a template `fail`, naming the value in its `# expect-error:` line | `schema` |
 
 ## Development
 
@@ -320,6 +368,32 @@ make build   # templ generate + build/krot-cp and build/krot-agent
 make test    # go test ./... (store tests need KROT_TEST_DATABASE_URL)
 make lint    # golangci-lint + templ fmt -fail
 make fmt     # gofmt + templ fmt
+```
+
+The chart gates, runnable locally:
+
+```sh
+# Lint both charts, including values.schema.json validation
+helm lint --strict charts/krot-control charts/krot-agent
+
+# Every supported scenario must render
+for chart in charts/krot-control charts/krot-agent; do
+  for f in "$chart"/ci/*-values.yaml; do helm template ci "$chart" -f "$f" > /dev/null || exit 1; done
+done
+
+# The schema must reject these
+for chart in charts/krot-control charts/krot-agent; do
+  for f in "$chart"/ci/invalid/*.yaml; do
+    helm template ci "$chart" -f "$f" > /dev/null && echo "unexpectedly accepted: $f"
+  done
+done
+
+# These must be rejected by a template guard, not by the schema
+for chart in charts/krot-control charts/krot-agent; do
+  for f in "$chart"/ci/invalid-render/*.yaml; do
+    helm template ci "$chart" -f "$f" > /dev/null && echo "unexpectedly accepted: $f"
+  done
+done
 ```
 
 Tests that touch the store need a scratch PostgreSQL and skip when

@@ -1,0 +1,21 @@
+# MUST be rejected: 'inbouds' is a typo for 'inbounds'. Unknown keys inside a
+# node are the failure mode the schema catches here - Helm ignores them, so the
+# node would render with no listener at all and the agent would serve nothing.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbouds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+
+wsIngress:
+  className: nginx
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

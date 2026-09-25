@@ -1,30 +1,76 @@
+# Single pipeline: quality gate on every change, release on a tag.
+#
+# Job ids are the status-check contexts (`lint`, `test`, `charts`, `schema`,
+# `release-tag`); the first four are meant to be required on pull requests.
+# There is deliberately no `paths:` filter on `pull_request` - a job skipped by
+# a path filter never reports a status, so requiring it would block every merge
+# that does not touch those paths.
+#
+#   lint         golangci-lint and the templ formatter over the Go tree.
+#   test         go vet, the test suite against a PostgreSQL service, and a
+#                full build of both binaries.
+#   charts       helm lint for both charts, plus a render of each with the
+#                values a real install uses.
+#   schema       proves the chart guardrails still have teeth: every
+#                ci/*-values.yaml scenario renders, every ci/invalid/*.yaml is
+#                refused by values.schema.json, and every
+#                ci/invalid-render/*.yaml is refused by a template that names
+#                the value in its `# expect-error:` line.
+#   release-tag  runs on a `release-*` tag: the version is either
+#                `<major>.<minor>.<patch>` (the stable track) or
+#                `<major>.<minor>.<patch>-rc.<n>` (the release candidate track),
+#                the CHANGELOG.md section the release body comes from has to
+#                exist, and the tagged commit has to be on main. It fails in
+#                seconds, before the rest of the pipeline starts.
+#
+# Tool pins live in `env:` below; Dependabot keeps the actions themselves fresh.
 name: ci
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - 'release-*'
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # One pin per tool, no `@latest` anywhere; Dependabot bumps the actions below.
+  GO_VERSION_FILE: go.mod
+  GOLANGCI_LINT_VERSION: v2.13.2
+  HELM_VERSION: 4.2.4
+  KUBECONFORM_VERSION: v0.8.0
+  KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+  # Oldest and newest Kubernetes releases the rendered manifests are checked
+  # against. kubeconform fetches these schemas from yannh/kubernetes-json-schema.
+  KUBERNETES_VERSIONS: 1.31.0 1.37.0
+
 jobs:
   lint:
+    name: Lint Go
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ env.GO_VERSION_FILE }}
       - name: Generate templ sources
         run: go tool templ generate ./internal/web
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.2
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
       - name: Check templ formatting
         run: go tool templ fmt -fail .
 
   test:
+    name: Test and build
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -45,7 +91,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ env.GO_VERSION_FILE }}
       - name: Generate templ sources
         run: go tool templ generate ./internal/web
       - name: Vet
@@ -56,13 +102,209 @@ jobs:
         run: make build
 
   charts:
+    name: Lint and validate charts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: Azure/setup-helm@v5
-      - name: Lint charts
-        run: helm lint charts/krot-control charts/krot-agent
-      - name: Render krot-control
-        run: helm template krot-cp charts/krot-control --set ingress.enabled=true --set ingress.host=vpn.example.com
-      - name: Render krot-agent
-        run: helm template krot-agent charts/krot-agent --set cpUrl=http://krot-cp:8080 --set nodes[0].name=vpn1 --set nodes[0].endpoint=vpn1.example.com --set nodes[0].inbounds[0].tag=vless-in --set nodes[0].inbounds[0].type=vless_reality --set nodes[0].inbounds[0].listenPort=8443 --set nodes[0].inbounds[0].sni=cdn.example.com
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install kubeconform
+        run: |
+          curl -fsSLo /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  /tmp/kubeconform.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform
+          helm version --short
+          kubeconform -v
+
+      # values.schema.json is applied by every helm command, so lint failures
+      # here cover both template shape and chart-level value validation.
+      - name: helm lint
+        run: |
+          set -euo pipefail
+          for chart in charts/krot-control charts/krot-agent; do
+            helm lint --strict "$chart"
+            for values in "$chart"/ci/*-values.yaml; do
+              echo "::group::helm lint --strict $chart -f $values"
+              helm lint --strict "$chart" -f "$values"
+              echo "::endgroup::"
+            done
+          done
+
+      # The chart defaults are a supported install too, and they are what most
+      # users get: the release job packages the tagged tree as-is, so validating
+      # only the fixtures would leave the published configuration unchecked.
+      - name: Render and check against Kubernetes schemas
+        run: |
+          set -euo pipefail
+          manifest="${RUNNER_TEMP}/krot-manifests.yaml"
+          validate() {
+            local chart="$1" label="$2"
+            shift 2
+            for k8s in $KUBERNETES_VERSIONS; do
+              echo "::group::$chart $label on Kubernetes $k8s"
+              # Render to a .yaml file before validating: kubeconform keys off
+              # the file extension, and input it does not recognise is reported
+              # as "0 resource found" with exit code 0 - a silent no-op.
+              helm template ci "$chart" "$@" > "$manifest"
+              expected=$(grep -c '^kind:' "$manifest" || true)
+              if [ "$expected" -eq 0 ]; then
+                echo "::error::$chart $label rendered no resources"
+                exit 1
+              fi
+              summary=$(kubeconform -strict -summary -kubernetes-version "$k8s" \
+                -schema-location default "$manifest")
+              echo "$summary"
+              if ! grep -qE "Summary: $expected resources? found" <<<"$summary"; then
+                echo "::error::$chart $label: kubeconform validated an unexpected number of resources (rendered $expected)"
+                exit 1
+              fi
+              # A skipped resource is a kind with no schema - the check above
+              # would still pass, so it is worth its own failure: without it a
+              # new CRD kind would be rendered and never validated.
+              if ! grep -q 'Skipped: 0' <<<"$summary"; then
+                echo "::error::$chart $label: kubeconform skipped resources, so a kind has no schema"
+                exit 1
+              fi
+              echo "::endgroup::"
+            done
+          }
+          for chart in charts/krot-control charts/krot-agent; do
+            validate "$chart" "default values"
+            for values in "$chart"/ci/*-values.yaml; do
+              validate "$chart" "$(basename "$values")" -f "$values"
+            done
+          done
+
+  schema:
+    name: Value schema guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # The schema is only worth having if it still refuses impossible values:
+      # weakening it (or dropping it) has to break this job, not pass silently.
+      - name: Impossible values must be rejected
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          status=0
+          for chart in charts/krot-control charts/krot-agent; do
+            fixtures=("$chart"/ci/invalid/*.yaml)
+            if [ "${#fixtures[@]}" -eq 0 ]; then
+              echo "::error::no fixtures under $chart/ci/invalid/ - this check would pass without validating anything"
+              exit 1
+            fi
+            for values in "${fixtures[@]}"; do
+              if out=$(helm template ci "$chart" -f "$values" 2>&1); then
+                echo "::error file=$values::$values was accepted, but it must be rejected by $chart/values.schema.json"
+                status=1
+              elif ! grep -qi schema <<<"$out"; then
+                echo "::error file=$values::$values failed for an unexpected reason (not schema validation):"
+                echo "$out"
+                status=1
+              else
+                echo "rejected as expected: $values"
+              fi
+            done
+          done
+          exit $status
+
+      # Not every impossible value is a schema question: an empty cpUrl or an
+      # empty secret name is a shape the schema accepts and a template has to
+      # refuse, because the refusal belongs to the value's consumer. The refusal
+      # has to be the template's own and it has to name the value that caused
+      # it, which every fixture declares in an `# expect-error:` line.
+      - name: Values the templates must refuse
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          status=0
+          for chart in charts/krot-control charts/krot-agent; do
+            fixtures=("$chart"/ci/invalid-render/*.yaml)
+            if [ "${#fixtures[@]}" -eq 0 ]; then
+              echo "::error::no fixtures under $chart/ci/invalid-render/ - this check would pass without validating anything"
+              exit 1
+            fi
+            for values in "${fixtures[@]}"; do
+              expected=$(sed -n 's/^# expect-error: //p' "$values")
+              if [ -z "$expected" ]; then
+                echo "::error file=$values::$values has no '# expect-error: <substring>' line naming the value the render must report"
+                status=1
+                continue
+              fi
+              if out=$(helm template ci "$chart" -f "$values" 2>&1); then
+                echo "::error file=$values::$values rendered, but a template has to refuse it ($expected)"
+                status=1
+                continue
+              fi
+              if grep -qi schema <<<"$out"; then
+                echo "::error file=$values::$values was rejected by values.schema.json, not by the template that owns the rule ($expected):"
+                echo "$out"
+                status=1
+                continue
+              fi
+              if ! grep -qF "$expected" <<<"$out"; then
+                echo "::error file=$values::$values was refused without naming '$expected':"
+                echo "$out"
+                status=1
+                continue
+              fi
+              echo "refused by a template as expected: $values ($expected)"
+            done
+          done
+          exit $status
+
+      - name: Supported value shapes must keep working
+        run: |
+          set -euo pipefail
+          for chart in charts/krot-control charts/krot-agent; do
+            for values in "$chart"/ci/*-values.yaml; do
+              helm template ci "$chart" -f "$values" > /dev/null
+              echo "rendered: $values"
+            done
+          done
+
+  # The tag is a release request: its shape, the CHANGELOG section the release
+  # body comes from, and the branch it was cut from are checked here, before the
+  # rest of the pipeline starts.
+  release-tag:
+    name: Resolve the release tag
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      channel: ${{ steps.resolve.outputs.channel }}
+      section: ${{ steps.resolve.outputs.section }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the release from the tag
+        id: resolve
+        run: |
+          set -euo pipefail
+          # The two version shapes, the track classification and the CHANGELOG
+          # section live in hack/release.sh - the same script the maintainer runs
+          # to cut the tag, so the two cannot drift.
+          hack/release.sh --check "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+          # Releases are cut from main: a tag on a commit main does not serve
+          # would publish charts nobody can reach from the branch, and the
+          # version would be recorded on a history that never had it.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${GITHUB_REF_NAME} is not on main - releases are cut from main"
+            exit 1
+          fi

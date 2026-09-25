@@ -1,0 +1,22 @@
+# MUST be rejected: a node name becomes a resource name suffix
+# (`krot-agent-<name>`, `krot-agent-spec-<name>`), so it has to be a name
+# Kubernetes accepts. An uppercase one makes the API server refuse every object
+# the node renders.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: VPN1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+
+wsIngress:
+  className: nginx
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

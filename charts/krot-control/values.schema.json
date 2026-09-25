@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "krot-control chart values",
+  "description": "Validated against the krot-control chart templates. Keys the templates interpolate verbatim are restricted to what renders into a valid manifest; the config map is a passthrough and is not validated beyond being a string map.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "image",
+    "secretName",
+    "ingress",
+    "config",
+    "resources"
+  ],
+  "definitions": {
+    "quantity": {
+      "description": "Kubernetes resource quantity: a number or a string with an optional suffix (m, Mi, Gi, ...).",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?(n|u|m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$"
+        }
+      ]
+    },
+    "stringMap": {
+      "description": "String-to-string map, as required by Kubernetes labels and annotations.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "imageSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository"
+      ],
+      "properties": {
+        "repository": {
+          "description": "Image repository. An empty one renders `image: \":<tag>\"`, which the kubelet refuses with InvalidImageName.",
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "description": "Rendered verbatim after the ':' separator; empty falls back to .Chart.AppVersion, which is why it may be empty here.",
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "resourcesSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requests",
+        "limits"
+      ],
+      "properties": {
+        "requests": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/quantity"
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/quantity"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "image": {
+      "$ref": "#/definitions/imageSpec"
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "podAnnotations": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "podLabels": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "secretName": {
+      "description": "Out-of-band Secret consumed with envFrom alongside the ConfigMap. The key is required; an empty name is refused by the template, because it renders a secretRef the API server refuses.",
+      "type": "string"
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "host": {
+          "description": "Ingress rule host. Required whenever the Ingress renders: an empty host renders a rule the API server refuses.",
+          "type": "string"
+        },
+        "tlsSecret": {
+          "description": "TLS secret name; empty renders the Ingress without a tls block.",
+          "type": "string"
+        }
+      }
+    },
+    "config": {
+      "description": "Non-secret environment, rendered verbatim into the krot-cp-config ConfigMap. Keys become environment variable names, so they have to be names Kubernetes accepts.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[-._a-zA-Z][-._a-zA-Z0-9]*$"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "resources": {
+      "$ref": "#/definitions/resourcesSpec"
+    }
+  }
+}

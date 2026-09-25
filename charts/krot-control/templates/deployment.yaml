@@ -38,7 +38,7 @@ spec:
             - configMapRef:
                 name: krot-cp-config
             - secretRef:
-                name: {{ .Values.secretName }}
+                name: {{ required "secretName is required: an empty name renders a secretRef the API server refuses" .Values.secretName }}
           ports:
             - name: http
               containerPort: 8080

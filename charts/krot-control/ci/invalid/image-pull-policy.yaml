@@ -1,0 +1,14 @@
+# MUST be rejected: Sometimes is not a valid imagePullPolicy. Kubernetes would
+# refuse the manifest with a confusing error further down the line.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  pullPolicy: Sometimes
+
+secretName: krot-cp-secrets
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

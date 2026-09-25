@@ -1,0 +1,54 @@
+# Scenario: two nodes, one of them without a vless_ws inbound.
+#
+# Guards the per-node conditionals: the second node renders no Service and no
+# Ingress (nothing to front), and the first node's Service carries only the
+# vless_ws port - the reality and hysteria2 inbounds are node ports. The
+# instance label is per node, so the two Deployments never select each other's
+# pods.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-pull
+
+podAnnotations:
+  ci.example/note: rendered
+podLabels:
+  ci.example/tier: edge
+
+cpUrl: http://krot-cp:8080
+pollInterval: 30s
+agentTokenSecretName: krot-agent
+dnsPolicy: Default
+
+nodes:
+  - name: vpn1
+    node: worker-1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+      - tag: vless-ws-ddg
+        type: vless_ws
+        listenPort: 9443
+        sni: front.ci.example
+        publicEndpoint: front.ci.example
+        publicPort: 443
+        wsPath: /up
+        originTls: false
+  - name: vpn2
+    node: worker-2
+    endpoint: vpn2.ci.example
+    routeProfile: proxy-server
+    inbounds:
+      - {tag: hy2-in, type: hysteria2, listenPort: 8443, sni: cdn.ci.example}
+
+wsIngress:
+  className: nginx
+  tlsSecretName: ""
+  readTimeout: "3600"
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

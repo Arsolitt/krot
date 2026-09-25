@@ -51,7 +51,7 @@ spec:
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
             - name: KROT_CP_URL
-              value: {{ $.Values.cpUrl | quote }}
+              value: {{ required "cpUrl is required: the agent fails fast with 'KROT_CP_URL is required' without it, so an empty value is a pod that never starts" $.Values.cpUrl | quote }}
             - name: KROT_POLL_INTERVAL
               value: {{ default "30s" $.Values.pollInterval | quote }}
             - name: KROT_HEALTH_ADDR
@@ -59,7 +59,7 @@ spec:
             - name: KROT_AGENT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ $.Values.agentTokenSecretName }}
+                  name: {{ required "agentTokenSecretName is required: an empty name renders a secretKeyRef the API server refuses" $.Values.agentTokenSecretName }}
                   key: token
           ports:
             - name: http

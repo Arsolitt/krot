@@ -1,0 +1,33 @@
+# Scenario: Zitadel as the identity provider instead of authentik.
+#
+# The provider switch is a values change only: KROT_IDP selects which provider
+# variables the control plane reads, and the chart renders the config map
+# verbatim either way. The authentik keys are left in place on purpose - the
+# binary ignores the ones its provider does not use, and an operator switching
+# back should not have to re-add them.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  tag: ""
+  pullPolicy: IfNotPresent
+
+secretName: krot-cp-secrets
+
+ingress:
+  enabled: true
+  className: nginx
+  host: vpn.ci.example
+  tlsSecret: ""
+
+config:
+  KROT_IDP: zitadel
+  KROT_BASE_URL: https://vpn.ci.example
+  KROT_OIDC_ISSUER: https://zitadel.ci.example
+  KROT_ZITADEL_URL: https://zitadel.ci.example
+  KROT_ZITADEL_PROJECT_ID: "1234567890"
+  KROT_ZITADEL_ROLE: vpn
+  KROT_ZITADEL_ADMIN_ROLE: vpn-admin
+  KROT_LISTEN_ADDR: :8080
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

@@ -1,0 +1,13 @@
+# MUST be rejected: the Deployment template dereferences resources.limits, so
+# dropping limits is a hard render error - the schema reports it instead, naming
+# the key rather than a template line.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+
+secretName: krot-cp-secrets
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  limits: null

@@ -1,0 +1,16 @@
+# MUST be rejected: config keys are rendered verbatim as environment variable
+# names, and Kubernetes accepts only [-._a-zA-Z][-._a-zA-Z0-9]* - a name
+# starting with a digit makes the API server refuse the whole Deployment
+# (`env[0].name: Invalid value: "2FA_ENABLED": must not start with a digit`).
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+
+secretName: krot-cp-secrets
+
+config:
+  KROT_IDP: authentik
+  2FA_ENABLED: "true"
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

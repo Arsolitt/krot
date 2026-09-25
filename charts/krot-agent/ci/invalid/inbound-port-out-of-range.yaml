@@ -1,0 +1,21 @@
+# MUST be rejected: a listenPort outside 1-65535 is not a port. The value is
+# rendered into the container port, the Service port and the agent's own spec,
+# so an impossible one is refused here rather than by the API server.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 70000, sni: cdn.ci.example}
+
+wsIngress:
+  className: nginx
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

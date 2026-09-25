@@ -1,0 +1,19 @@
+# MUST be rejected: 'bridge' is not a DNS policy Kubernetes implements. The
+# agent pods are hostNetwork, so the policy decides whether the control-plane
+# Service name resolves at all - a value outside the set is a pod that cannot
+# reach the control plane.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+dnsPolicy: bridge
+
+nodes: []
+
+wsIngress:
+  className: nginx
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

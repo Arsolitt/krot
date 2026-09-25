@@ -1,0 +1,23 @@
+# MUST fail the render (not the schema): ingress.enabled with an empty host
+# renders a rule the API server refuses (`spec.rules[0].host: Invalid value:
+# "": a lowercase RFC 1123 subdomain must consist of ...`), and the chart cannot
+# default a host - it does not know the operator's DNS. The template refuses it
+# instead, naming the value.
+#
+# expect-error: ingress.host is required
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+
+secretName: krot-cp-secrets
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

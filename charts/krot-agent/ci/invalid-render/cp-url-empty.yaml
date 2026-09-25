@@ -1,0 +1,26 @@
+# MUST fail the render (not the schema): the agent fails fast with
+# 'KROT_CP_URL is required' when the control-plane URL is empty, so a pod
+# rendered with an empty one never starts - and the failure surfaces as a
+# CrashLoopBackOff far from the value that caused it. The schema requires the
+# key, so only an explicitly empty value reaches the template, and the template
+# refuses it.
+#
+# expect-error: cpUrl is required
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: ""
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+
+wsIngress:
+  className: nginx
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}
