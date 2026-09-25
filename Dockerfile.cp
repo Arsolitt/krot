@@ -27,9 +27,13 @@ FROM alpine:3.20
 LABEL org.opencontainers.image.title="krot-cp" \
       org.opencontainers.image.description="Krot control plane: portal, subscriptions, agent API, identity sync" \
       org.opencontainers.image.source="https://github.com/Arsolitt/krot" \
-      org.opencontainers.image.licenses="AGPL-3.0-only"
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
 COPY --from=build /out/krot-cp /app
+
+# License texts ship with the image: the project's AGPL-3.0 license plus the
+# generated bundle of third-party module licenses (see licenses/README.md).
+COPY LICENSE licenses /licenses/
 
 RUN addgroup -g 2222 -S krot && adduser -u 1111 -S -G krot krot \
     && mkdir -p /tmp && chown krot:krot /tmp

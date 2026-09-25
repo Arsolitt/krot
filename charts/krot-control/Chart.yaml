@@ -4,3 +4,8 @@ description: "Krot control plane: portal, subscriptions, agent API, identity syn
 type: application
 version: 0.1.1
 appVersion: "0.1.1"
+home: https://github.com/Arsolitt/krot
+sources:
+  - https://github.com/Arsolitt/krot
+annotations:
+  artifacthub.io/license: AGPL-3.0-or-later

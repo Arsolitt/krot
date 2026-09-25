@@ -316,13 +316,15 @@ tag is created by [`hack/release.sh`](hack/release.sh):
    of `origin/main`, and a tag that exists locally or on `origin`;
    `hack/release.sh --check <version>` validates without pushing.
 3. Pushing the tag starts the pipeline. `ci` runs `lint`, `test`, `charts`,
-   `schema` and `release-tag` — the last one resolves the version, the channel
-   and the section and refuses a tag that is not an ancestor of `origin/main`.
-   `release` then builds and pushes `ghcr.io/arsolitt/krot-cp` and
-   `ghcr.io/arsolitt/krot-agent` for `linux/amd64`, packages both charts at the
-   tag's version (`helm package --version`), creates the GitHub release with the
-   CHANGELOG section as its body, and publishes the chart repository index on
-   the `gh-pages` branch.
+   `schema`, `licenses` and `release-tag` — the last one resolves the version,
+   the channel and the section and refuses a tag that is not an ancestor of
+   `origin/main`. `release` then builds and pushes `ghcr.io/arsolitt/krot-cp`
+   and `ghcr.io/arsolitt/krot-agent` for `linux/amd64`, packages both charts at
+   the tag's version (`helm package --version`), creates the GitHub release with
+   the CHANGELOG section as its body and attaches the license bundle
+   (`krot-licenses-<version>.tar.gz`, carrying `LICENSE` and `licenses/`) as an
+   extra asset, and publishes the chart repository index on the `gh-pages`
+   branch.
 4. The job then records the released version in both `charts/*/Chart.yaml` on
    `main`, in a `chore(release): record <tag> [skip ci]` commit — the tag is the
    source of truth and the branch follows it.
@@ -341,8 +343,8 @@ in [`.github/workflows/release.yml`](.github/workflows/release.yml) and the
 
 ### CI gates
 
-Every pull request runs five jobs, and the first four are the ones worth marking
-as required checks:
+Every pull request runs six jobs; the first five are the ones worth marking as
+required checks, and `release-tag` runs on a `release-*` tag push only:
 
 | Job | What it proves |
 | --- | --- |
@@ -350,6 +352,7 @@ as required checks:
 | `test` | `go vet ./...`, the test suite against a PostgreSQL service, and `make build`. |
 | `charts` | `helm lint --strict` for both charts and every scenario, then `helm template` + `kubeconform -strict` for the defaults and every scenario on the Kubernetes versions in the workflow's `env:` block. |
 | `schema` | `charts/*/ci/invalid/*.yaml` is still refused by `values.schema.json`, `charts/*/ci/invalid-render/*.yaml` is still refused by the chart's own template guards, and every supported scenario still renders. |
+| `licenses` | The committed bundle is current: `make licenses` regenerates `licenses/` and the charts' `LICENSE` copies for the modules linked into the released binaries, and the job fails on any diff in those paths — run `make licenses` and commit the result after a dependency change. |
 | `release-tag` | A `release-*` tag push only: the version shape, the CHANGELOG section and the branch the tag was cut from. |
 
 The chart fixtures come in three categories, one meaning each — a fixture in the
@@ -368,6 +371,7 @@ make build   # templ generate + build/krot-cp and build/krot-agent
 make test    # go test ./... (store tests need KROT_TEST_DATABASE_URL)
 make lint    # golangci-lint + templ fmt -fail
 make fmt     # gofmt + templ fmt
+make licenses # regenerate licenses/ and the charts' LICENSE copies
 ```
 
 The chart gates, runnable locally:
@@ -417,5 +421,8 @@ Go releases.
 
 ## License
 
-krot is released under the GNU Affero General Public License v3.0 (AGPL-3.0).
-See [LICENSE](LICENSE) for the full text.
+krot is released under the GNU Affero General Public License v3.0 or later
+(AGPL-3.0-or-later). Copyright (C) 2026 Arsolitt <https://arsolitt.tech/>.
+The full text is in [LICENSE](LICENSE); the license texts of every third-party
+module the released binaries link are collected in
+[`licenses/`](licenses/README.md).

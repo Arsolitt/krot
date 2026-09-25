@@ -1,7 +1,8 @@
 # Single pipeline: quality gate on every change, release on a tag.
 #
 # Job ids are the status-check contexts (`lint`, `test`, `charts`, `schema`,
-# `release-tag`); the first four are meant to be required on pull requests.
+# `licenses`, `release-tag`); the first five are meant to be required on pull
+# requests.
 # There is deliberately no `paths:` filter on `pull_request` - a job skipped by
 # a path filter never reports a status, so requiring it would block every merge
 # that does not touch those paths.
@@ -16,6 +17,10 @@
 #                refused by values.schema.json, and every
 #                ci/invalid-render/*.yaml is refused by a template that names
 #                the value in its `# expect-error:` line.
+#   licenses     regenerates the third-party license bundle (licenses/ and the
+#                two chart LICENSE copies) and fails if the committed result
+#                differs, so a dependency change cannot land without its
+#                notices.
 #   release-tag  runs on a `release-*` tag: the version is either
 #                `<major>.<minor>.<patch>` (the stable track) or
 #                `<major>.<minor>.<patch>-rc.<n>` (the release candidate track),
@@ -302,6 +307,36 @@ jobs:
             exit 1
           fi
           echo "an empty nodes list renders nothing, as documented"
+
+  # The bundle under licenses/ and the two chart LICENSE copies are distilled
+  # from the module graph, so a dependency bump has to carry its notices with
+  # it. Regenerating here and diffing is what keeps the committed bundle
+  # trustworthy without trusting the contributor's machine.
+  licenses:
+    name: Licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+      - name: Regenerate the license bundle
+        run: make licenses
+
+      # A brand-new file has to fail this too, not just an edited one: the
+      # intent-to-add records the path without a blob, so untracked files show
+      # up in the diff below. The diff is against HEAD on purpose - plain
+      # `git diff` compares against the index, and `git add` stages a deletion
+      # there, which would let a file dropped from the bundle slip through.
+      - name: The committed bundle has to match
+        run: |
+          set -euo pipefail
+          git add --intent-to-add licenses
+          if ! git diff HEAD --exit-code -- licenses charts/krot-control/LICENSE charts/krot-agent/LICENSE; then
+            echo "::error::the generated license bundle is out of date - run make licenses and commit the result"
+            exit 1
+          fi
+          echo "the committed license bundle is up to date"
 
   # The tag is a release request: its shape, the CHANGELOG section the release
   # body comes from, and the branch it was cut from are checked here, before the

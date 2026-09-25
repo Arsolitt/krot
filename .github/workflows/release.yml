@@ -10,12 +10,14 @@
 #            release wall-clock time; re-add `linux/arm64` to `platforms` and
 #            the `docker/setup-qemu-action` step to publish it.
 #   release  packages both charts at the tag's version, creates the GitHub
-#            release with the CHANGELOG section as its body, publishes the
-#            chart repository index on gh-pages, and records the version on
-#            main.
+#            release with the CHANGELOG section as its body, attaches the
+#            license bundle (LICENSE + licenses/, as
+#            krot-licenses-<version>.tar.gz), publishes the chart repository
+#            index on gh-pages, and records the version on main.
 #
 # The gates live in ci.yml and run on the same tag push (`lint`, `test`,
-# `charts`, `schema`, `release-tag`); this workflow only publishes.
+# `charts`, `schema`, `licenses`, `release-tag`); this workflow only
+# publishes.
 name: release
 
 on:
@@ -183,6 +185,37 @@ jobs:
           gh release upload "$TAG" .cr-release-packages/*.tgz --clobber
           echo "::notice::$TAG published from the ${CHANNEL} track with the CHANGELOG.md body"
 
+      # The license bundle is a separate asset rather than a file inside
+      # .cr-release-packages: `helm repo index` reads that directory as a set
+      # of chart packages, so anything non-chart in it breaks the index. The
+      # tarball is built from the tagged tree - the same tree the charts are
+      # packaged from - and read back with `tar -tzf` before it is uploaded,
+      # because an archive that silently dropped the bundle would publish as
+      # if it carried the notice. Uploading with `--clobber` keeps a re-run
+      # idempotent, exactly like the chart upload above.
+      - name: Attach the license bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-tag.outputs.tag }}
+          VERSION: ${{ needs.release-tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          rm -rf dist-licenses
+          mkdir -p dist-licenses
+          asset="dist-licenses/krot-licenses-${VERSION}.tar.gz"
+          tar -czf "$asset" LICENSE licenses
+
+          listing=$(tar -tzf "$asset")
+          for member in LICENSE licenses/README.md; do
+            if ! grep -qxF "$member" <<<"$listing"; then
+              echo "::error::${asset} does not carry ${member}"
+              exit 1
+            fi
+          done
+
+          gh release upload "$TAG" "$asset" --clobber
+          echo "::notice::$(basename "$asset") attached to ${TAG}"
+
       # The chart repository index is generated with `helm repo index` rather
       # than chart-releaser: `cr` looks releases up by a `<chart>-<version>` tag
       # name, and this repository publishes one release per version for both
@@ -294,5 +327,6 @@ jobs:
             echo "- \`${TAG}\` published from the ${CHANNEL} track"
             echo "- images: \`ghcr.io/arsolitt/krot-cp:${VERSION}\`, \`ghcr.io/arsolitt/krot-agent:${VERSION}\`"
             echo "- charts recorded on main: \`${VERSION}\`"
+            echo "- license bundle: \`krot-licenses-${VERSION}.tar.gz\`"
             echo "- index: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/index.yaml"
           } >> "$GITHUB_STEP_SUMMARY"

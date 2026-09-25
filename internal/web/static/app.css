@@ -80,3 +80,11 @@ tr:last-child td { border-bottom: none; }
 .mono { font-family: ui-monospace, monospace; color: var(--muted); font-size: 0.8rem; }
 .err { color: var(--bad); overflow-wrap: anywhere; }
 a { color: var(--accent); }
+
+footer {
+  max-width: 46rem;
+  margin: 0 auto 3rem;
+  padding: 0 1rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}

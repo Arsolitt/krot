@@ -15,7 +15,7 @@ GOTOOLCHAIN ?= go1.26.4
 LDFLAGS     := -s -w
 VERSION     ?= dev
 
-.PHONY: all build test lint fmt clean
+.PHONY: all build test lint licenses fmt clean
 
 all: build
 
@@ -37,6 +37,10 @@ test:
 lint:
 	golangci-lint run
 	go tool templ fmt -fail .
+
+# Rebuild the generated license bundle under licenses/; CI gates it by diffing.
+licenses:
+	GOTOOLCHAIN=$(GOTOOLCHAIN) ./hack/licenses.sh
 
 # Format Go code and templ templates.
 fmt:
