@@ -138,6 +138,10 @@ jobs:
       # The chart defaults are a supported install too, and they are what most
       # users get: the release job packages the tagged tree as-is, so validating
       # only the fixtures would leave the published configuration unchecked.
+      #
+      # krot-agent renders nothing with its defaults (`nodes: []` is a valid
+      # install before any node is declared), so its default render is validated
+      # with one node - the smallest configuration that produces a workload.
       - name: Render and check against Kubernetes schemas
         run: |
           set -euo pipefail
@@ -173,11 +177,20 @@ jobs:
               echo "::endgroup::"
             done
           }
-          for chart in charts/krot-control charts/krot-agent; do
-            validate "$chart" "default values"
-            for values in "$chart"/ci/*-values.yaml; do
-              validate "$chart" "$(basename "$values")" -f "$values"
-            done
+          validate charts/krot-control "default values"
+          for values in charts/krot-control/ci/*-values.yaml; do
+            validate charts/krot-control "$(basename "$values")" -f "$values"
+          done
+          validate charts/krot-agent "default values with one node" \
+            --set cpUrl=http://krot-cp:8080 \
+            --set nodes[0].name=vpn1 \
+            --set nodes[0].endpoint=vpn1.example.com \
+            --set nodes[0].inbounds[0].tag=vless-in \
+            --set nodes[0].inbounds[0].type=vless_reality \
+            --set nodes[0].inbounds[0].listenPort=8443 \
+            --set nodes[0].inbounds[0].sni=cdn.example.com
+          for values in charts/krot-agent/ci/*-values.yaml; do
+            validate charts/krot-agent "$(basename "$values")" -f "$values"
           done
 
   schema:
@@ -273,6 +286,22 @@ jobs:
               echo "rendered: $values"
             done
           done
+
+      # krot-agent renders nothing with `nodes: []`, which is a supported
+      # install (the chart is installed before any node is declared) and the
+      # reason its default render is validated with one node instead. The
+      # property is asserted here so a template that started emitting a
+      # half-configured workload for an empty list would fail.
+      - name: An empty nodes list renders no workload
+        run: |
+          set -euo pipefail
+          out=$(helm template ci charts/krot-agent --set cpUrl=http://krot-cp:8080)
+          if [ -n "$out" ]; then
+            echo "::error::charts/krot-agent rendered resources for an empty nodes list:"
+            echo "$out"
+            exit 1
+          fi
+          echo "an empty nodes list renders nothing, as documented"
 
   # The tag is a release request: its shape, the CHANGELOG section the release
   # body comes from, and the branch it was cut from are checked here, before the
