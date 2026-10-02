@@ -13,14 +13,16 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.1.2] - 2026-10-02
+## [0.1.3] - 2026-10-02
 
-### Added
+### Fixed
 
-- `KROT_TOKEN_NAMESPACE` on the control plane: the HMAC namespace prefix of
-  derived subscription tokens, used verbatim and defaulting to `krot-sub:`.
-  Setting `cheburnet-sub:` keeps subscription URLs issued by a pre-rename
-  corporate instance valid byte-for-byte.
+- The packaged charts resolve their default image tag to the released version:
+  `helm package --app-version` stamps `.Chart.AppVersion`, which
+  `charts/krot-control` and `charts/krot-agent` fall back to when `image.tag`
+  is empty. The 0.1.2 packages resolve to the previous image
+  (`krot-cp:0.1.1` / `krot-agent:0.1.1`) - use 0.1.3, or set `image.tag`
+  explicitly on 0.1.2.
 
 ### Changed
 
@@ -30,11 +32,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `chore(release): record <tag> [skip ci]` record commits and refuses to cut a
   tag from a commit carrying a workflow-skip token, because GitHub creates no
   run for such a push — the tag would silently release nothing.
-- The packaged charts carry `appVersion` = the released version, so the default
-  image tag follows the release rather than the previous one.
 - The gh-pages index is published with pinned chart-releaser
   (`--release-name-template 'release-{{ .Version }}'`) instead of the
   hand-rolled `helm repo index` step.
+
+## [0.1.2] - 2026-10-02
+
+### Added
+
+- `KROT_TOKEN_NAMESPACE` on the control plane: the HMAC namespace prefix of
+  derived subscription tokens, used verbatim and defaulting to `krot-sub:`.
+  Setting `cheburnet-sub:` keeps subscription URLs issued by a pre-rename
+  corporate instance valid byte-for-byte.
 
 ## [0.1.1] - 2026-09-25
 
