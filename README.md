@@ -315,19 +315,27 @@ tag is created by [`hack/release.sh`](hack/release.sh):
 2. Cut the tag with `hack/release.sh <version>` (for example
    `hack/release.sh 0.2.0-rc.1`). It refuses a version of any other shape, a
    missing CHANGELOG section, a dirty working tree, a `HEAD` that is not the tip
-   of `origin/main`, and a tag that exists locally or on `origin`;
-   `hack/release.sh --check <version>` validates without pushing.
-3. Pushing the tag starts the pipeline. `ci` runs `lint`, `test`, `charts`,
-   `schema`, `licenses` and `release-tag` — the last one resolves the version,
-   the channel and the section and refuses a tag that is not an ancestor of
-   `origin/main`. `release` then builds and pushes `ghcr.io/arsolitt/krot-cp`
-   and `ghcr.io/arsolitt/krot-agent` for `linux/amd64`, packages both charts at
-   the tag's version (`helm package --version`), creates the GitHub release with
-   the CHANGELOG section as its body and attaches the license bundle
+   of `origin/main`, and a tag that exists locally or on `origin`. Since GitHub
+   creates no run at all for a push whose head commit carries a workflow-skip
+   token, it also steps past the `chore(release): record <tag> [skip ci]`
+   record commits and refuses to cut the tag from a commit carrying one — such a
+   tag would silently release nothing. `hack/release.sh --check <version>`
+   validates without pushing.
+3. Pushing the tag starts the single workflow,
+   [`.github/workflows/ci.yml`](.github/workflows/ci.yml). `release-tag`
+   resolves the version, the channel and the section, refusing a tag that is not
+   an ancestor of `origin/main`; the gates run on the same push, and so does
+   `images` (`ghcr.io/arsolitt/krot-cp` and `krot-agent`, `linux/amd64`).
+   `release` needs all of them, so a red gate blocks publication instead of
+   failing alongside it: it packages both charts at the tag's version
+   (`helm package --version --app-version`, so the packaged charts' default
+   image tag is the version this run built), creates the GitHub release with the
+   CHANGELOG section as its body, attaches the license bundle
    (`krot-licenses-<version>.tar.gz`, carrying `LICENSE` and `licenses/`) as an
    extra asset, and publishes the chart repository index on the `gh-pages`
-   branch.
-4. The job then records the released version in both `charts/*/Chart.yaml` on
+   branch with pinned chart-releaser
+   (`cr index --release-name-template 'release-{{ .Version }}'`).
+4. `release` then records the released version in both `charts/*/Chart.yaml` on
    `main`, in a `chore(release): record <tag> [skip ci]` commit — the tag is the
    source of truth and the branch follows it.
 5. Consumers pick the version up with `helm repo update`. A candidate is
@@ -340,13 +348,15 @@ even a chart change are safe until a tag is pushed.
 
 The images are built for `linux/amd64` only: the arm64 leg needed QEMU emulation
 and dominated the release wall-clock time. Re-add `linux/arm64` to `platforms`
-in [`.github/workflows/release.yml`](.github/workflows/release.yml) and the
+in [`ci.yml`](.github/workflows/ci.yml) and the
 `docker/setup-qemu-action` step to publish it.
 
 ### CI gates
 
 Every pull request runs six jobs; the first five are the ones worth marking as
-required checks, and `release-tag` runs on a `release-*` tag push only:
+required checks, and `release-tag` runs on a `release-*` tag push only. On that
+tag push the same gates run and the `release` job needs every one of them, so a
+red gate blocks the release instead of failing alongside it:
 
 | Job | What it proves |
 | --- | --- |
@@ -355,7 +365,7 @@ required checks, and `release-tag` runs on a `release-*` tag push only:
 | `charts` | `helm lint --strict` for both charts and every scenario, then `helm template` + `kubeconform -strict` for the defaults and every scenario on the Kubernetes versions in the workflow's `env:` block. |
 | `schema` | `charts/*/ci/invalid/*.yaml` is still refused by `values.schema.json`, `charts/*/ci/invalid-render/*.yaml` is still refused by the chart's own template guards, and every supported scenario still renders. |
 | `licenses` | The committed bundle is current: `make licenses` regenerates `licenses/` and the charts' `LICENSE` copies for the modules linked into the released binaries, and the job fails on any diff in those paths — run `make licenses` and commit the result after a dependency change. |
-| `release-tag` | A `release-*` tag push only: the version shape, the CHANGELOG section and the branch the tag was cut from. |
+| `release-tag` | A `release-*` tag push only: resolves the version, the channel and the CHANGELOG section the `release` job consumes, and refuses a tag that is not an ancestor of `origin/main`. |
 
 The chart fixtures come in three categories, one meaning each — a fixture in the
 wrong folder makes the job that owns it fail, not pass:

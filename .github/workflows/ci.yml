@@ -28,6 +28,25 @@
 #                exist, and the tagged commit has to be on main. It fails in
 #                seconds, before the rest of the pipeline starts.
 #
+# A `release-*` tag push runs the same gates and then publishes; nothing else
+# publishes. The tag carries the version, so nothing in the tree is bumped by
+# hand: the release job stamps it into both packaged charts (`helm package
+# --version` / `--app-version`) and records it in `charts/*/Chart.yaml` on main
+# afterwards.
+#
+#   images       builds and pushes ghcr.io/arsolitt/krot-cp and krot-agent for
+#                linux/amd64, tagged with the version (and `latest` on the
+#                stable track only). The arm64 leg needed QEMU emulation and
+#                dominated the release wall-clock time; re-add `linux/arm64` to
+#                `platforms` and the `docker/setup-qemu-action` step to publish
+#                it.
+#   release      needs every job above: it packages the charts at the tag's
+#                version, creates the GitHub release with the CHANGELOG section
+#                as its body, attaches the license bundle (LICENSE + licenses/,
+#                as krot-licenses-<version>.tar.gz), publishes the chart
+#                repository index on gh-pages, and records the released version
+#                on main.
+#
 # Tool pins live in `env:` below; Dependabot keeps the actions themselves fresh.
 name: ci
 
@@ -51,6 +70,7 @@ env:
   GO_VERSION_FILE: go.mod
   GOLANGCI_LINT_VERSION: v2.13.2
   HELM_VERSION: 4.2.4
+  CHART_RELEASER_VERSION: v1.8.1
   KUBECONFORM_VERSION: v0.8.0
   KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
   # Oldest and newest Kubernetes releases the rendered manifests are checked
@@ -372,3 +392,283 @@ jobs:
             echo "::error::${GITHUB_REF_NAME} is not on main - releases are cut from main"
             exit 1
           fi
+
+  images:
+    name: Build and push images
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: krot-cp
+            dockerfile: Dockerfile.cp
+          - name: krot-agent
+            dockerfile: Dockerfile.agent
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The tag is `release-<version>`, which is not a semver tag, so the
+      # version is extracted with a match pattern rather than type=semver.
+      # `latest` follows the stable track only: a candidate must never be what
+      # an unqualified pull resolves to.
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/arsolitt/${{ matrix.name }}
+          tags: |
+            type=match,pattern=release-(.*),group=1
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-rc.') }}
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  release:
+    name: Publish the release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [release-tag, lint, test, charts, schema, licenses, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # One release at a time: two tags pushed close together would otherwise
+    # race on the same branch, and the loser fails on a non-fast-forward push
+    # after its release already exists.
+    concurrency: krot-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      # The tag carries the version, and the tagged tree still records the
+      # *previous* release (the recording commit lands on main only after this
+      # job), so the packages are stamped from the tag: `--version` stamps
+      # Chart.yaml and `--app-version` appVersion, which the charts' default
+      # image tag follows. Charts are discovered rather than listed, so a third
+      # chart is released without touching this file. Each artifact is then read
+      # back: a package missing either field would publish under a tag the index
+      # points at.
+      - name: Package the charts at the released version
+        env:
+          VERSION: ${{ needs.release-tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          rm -rf .cr-release-packages
+          mkdir -p .cr-release-packages
+          charts=()
+          for candidate in charts/*/Chart.yaml; do
+            [ -e "$candidate" ] || continue
+            charts+=("$(dirname "$candidate")")
+          done
+          [ "${#charts[@]}" -gt 0 ] || { echo "::error::no charts found under charts/"; exit 1; }
+          for chart in "${charts[@]}"; do
+            helm package "$chart" --version "$VERSION" --app-version "$VERSION" --destination .cr-release-packages
+            name=$(awk '/^name:/ { print $2; exit }' "$chart/Chart.yaml")
+            package=".cr-release-packages/${name}-${VERSION}.tgz"
+            if [ ! -f "$package" ]; then
+              echo "::error::helm package produced no ${package}"
+              exit 1
+            fi
+            packaged=$(tar -xzOf "$package" "${name}/Chart.yaml")
+            if ! grep -qE "^version: \"?${VERSION}\"?$" <<<"$packaged"; then
+              echo "::error::the packaged chart ${name} does not carry ${VERSION} in its version field"
+              exit 1
+            fi
+            if ! grep -qE "^appVersion: \"?${VERSION}\"?$" <<<"$packaged"; then
+              echo "::error::the packaged chart ${name} does not carry ${VERSION} in its appVersion field"
+              exit 1
+            fi
+            echo "::notice::packaged $(basename "$package") from the tag"
+          done
+
+      # The release is created here rather than by `cr upload`, because `cr`
+      # cannot create a pre-release and a candidate that exists unflagged - even
+      # for the seconds between two steps - is a release consumers see as
+      # stable. The flag and the body are part of the create call, and a re-run
+      # after a failed step finds the release and updates it instead, so the
+      # step is idempotent.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-tag.outputs.tag }}
+          VERSION: ${{ needs.release-tag.outputs.version }}
+          SECTION: ${{ needs.release-tag.outputs.section }}
+          CHANNEL: ${{ needs.release-tag.outputs.channel }}
+        run: |
+          set -euo pipefail
+          notes=$(mktemp)
+          trap 'rm -f "$notes"' EXIT
+          hack/release-notes.sh "$VERSION" "$SECTION" > "$notes"
+          args=(--title "$TAG" --notes-file "$notes")
+          if [ "$CHANNEL" = "rc" ]; then
+            args+=(--prerelease --latest=false)
+          else
+            args+=(--latest)
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" "${args[@]}"
+          else
+            gh release create "$TAG" --verify-tag "${args[@]}"
+          fi
+          gh release upload "$TAG" .cr-release-packages/*.tgz --clobber
+          echo "::notice::$TAG published from the ${CHANNEL} track with the CHANGELOG.md body"
+
+      # The license bundle is a separate asset rather than a file inside
+      # .cr-release-packages: chart-releaser reads that directory as a set of
+      # chart packages, so anything non-chart in it breaks the index. The
+      # tarball is built from the tagged tree - the same tree the charts are
+      # packaged from - and read back with `tar -tzf` before it is uploaded,
+      # because an archive that silently dropped the bundle would publish as
+      # if it carried the notice. Uploading with `--clobber` keeps a re-run
+      # idempotent, exactly like the chart upload above.
+      - name: Attach the license bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-tag.outputs.tag }}
+          VERSION: ${{ needs.release-tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          rm -rf dist-licenses
+          mkdir -p dist-licenses
+          asset="dist-licenses/krot-licenses-${VERSION}.tar.gz"
+          tar -czf "$asset" LICENSE licenses
+
+          listing=$(tar -tzf "$asset")
+          for member in LICENSE licenses/README.md; do
+            if ! grep -qxF "$member" <<<"$listing"; then
+              echo "::error::${asset} does not carry ${member}"
+              exit 1
+            fi
+          done
+
+          gh release upload "$TAG" "$asset" --clobber
+          echo "::notice::$(basename "$asset") attached to ${TAG}"
+
+      # Only the pinned `cr` binary is taken from the action; its own release
+      # path packages "charts changed since the previous tag", which is not the
+      # contract here - the tag is what selects the version.
+      - name: Install chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        with:
+          version: ${{ env.CHART_RELEASER_VERSION }}
+          install_only: true
+
+      # `cr index` reads the release and its assets back out of GitHub and
+      # rewrites `index.yaml` on gh-pages; the packages it indexes are the ones
+      # this job built. It keeps its local copy of the index at
+      # `.cr-index/index.yaml` and does not create that directory, so it is
+      # created here first. `cr` looks the release up *by tag*: the tag it looks
+      # for is the release-name template it is given, and the template below
+      # names the prefix this pipeline pushes (`release-<version>`). The default
+      # is `<chart>-<version>`, so without the template the lookup would fail.
+      - name: Publish the chart repository index
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          mkdir -p .cr-index
+          cr index -o "$owner" -r "$repo" \
+            --release-name-template 'release-{{ .Version }}' \
+            --push
+
+      # The tag is the source of truth, so the branch records the release after
+      # the fact: a commit whose only change is the version lines. Charts are
+      # discovered the same way the packaging step discovers them. A push made
+      # with GITHUB_TOKEN starts no run by itself, and `[skip ci]` keeps the
+      # commit out of a pipeline if the token ever changes to a PAT.
+      - name: Record the released version on main
+        env:
+          TAG: ${{ needs.release-tag.outputs.tag }}
+          VERSION: ${{ needs.release-tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          git checkout --quiet -B main origin/main
+
+          charts=()
+          for candidate in charts/*/Chart.yaml; do
+            [ -e "$candidate" ] || continue
+            charts+=("$(dirname "$candidate")")
+          done
+          [ "${#charts[@]}" -gt 0 ] || { echo "::error::no charts found under charts/"; exit 1; }
+
+          changed=0
+          for chart in "${charts[@]}"; do
+            current=$(awk '/^version:/ { print $2; exit }' "$chart/Chart.yaml")
+            if [ "$current" = "$VERSION" ]; then
+              echo "::notice::$chart already records ${VERSION}"
+              continue
+            fi
+
+            # main never moves backwards: a release cut from an older commit (a
+            # backfill of an old line) publishes and leaves the branch alone.
+            core_current="${current%%-*}"
+            core_released="${VERSION%%-*}"
+            if [ "$core_current" != "$core_released" ]; then
+              lower=$(printf '%s\n%s\n' "$core_current" "$core_released" | sort -V | head -n1)
+              if [ "$lower" = "$core_released" ]; then
+                echo "::warning::$chart records ${current}, which is newer than ${VERSION} - left alone"
+                continue
+              fi
+            fi
+
+            sed -i -E "s/^version: .*/version: ${VERSION}/" "$chart/Chart.yaml"
+            sed -i -E "s/^appVersion: .*/appVersion: \"${VERSION}\"/" "$chart/Chart.yaml"
+            grep -qxF "version: ${VERSION}" "$chart/Chart.yaml"
+            changed=1
+          done
+
+          if [ "$changed" -eq 0 ]; then
+            echo "::notice::main already records ${VERSION}; nothing to commit"
+            exit 0
+          fi
+
+          # The discovered chart directories, as the manifests the commit records.
+          manifests=("${charts[@]/%//Chart.yaml}")
+          git add "${manifests[@]}"
+          git commit --message "chore(release): record ${TAG} [skip ci]"
+          git push --quiet origin main
+          echo "::notice::main now records ${VERSION}"
+
+      - name: Summarize
+        env:
+          TAG: ${{ needs.release-tag.outputs.tag }}
+          CHANNEL: ${{ needs.release-tag.outputs.channel }}
+          VERSION: ${{ needs.release-tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### krot release"
+            echo ""
+            echo "- \`${TAG}\` published from the ${CHANNEL} track"
+            echo "- images: \`ghcr.io/arsolitt/krot-cp:${VERSION}\`, \`ghcr.io/arsolitt/krot-agent:${VERSION}\`"
+            echo "- charts recorded on main: \`${VERSION}\`"
+            echo "- license bundle: \`krot-licenses-${VERSION}.tar.gz\`"
+            echo "- index: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/index.yaml"
+          } >> "$GITHUB_STEP_SUMMARY"

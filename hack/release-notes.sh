@@ -3,7 +3,7 @@
 # Print the GitHub release body for one release: the `## [<section version>]`
 # section of CHANGELOG.md, plus a compare link when the tags can be resolved.
 #
-# The `release` job in .github/workflows/release.yml runs this once per tag it
+# The `release` job in .github/workflows/ci.yml runs this once per tag it
 # has just published (`hack/release-notes.sh <version> <section version>`) and
 # pipes the output into `gh release create --notes-file`; `hack/release.sh` runs
 # it in `--check` mode, before a tag exists, because a missing section has to

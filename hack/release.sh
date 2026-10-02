@@ -35,8 +35,24 @@
 #      is the rule this checks);
 # and, in the releasing form only:
 #   3. the working tree is clean;
-#   4. HEAD is the tip of origin/main - the tag is cut from what main serves;
-#   5. the tag does not exist, locally or on origin.
+#   4. HEAD is the tip of origin/main - the tag is cut from what main serves,
+#      stepping past the release job's own record commit when that is the tip
+#      (see "The commit the tag names" below);
+#   5. the tag does not exist, locally or on origin;
+#   6. the commit the tag will name carries no workflow-skip token - GitHub
+#      creates no run at all for a push whose head commit carries one, and a tag
+#      push is a push.
+#
+# The commit the tag names: a release pushes a record commit of its own to main
+# last (`chore(release): record release-<version> [skip ci]` - bookkeeping, the
+# version in `charts/*/Chart.yaml` and nothing else), written by the `release`
+# job in `ci.yml`. So the tip a maintainer finds after a candidate is exactly
+# the commit GitHub refuses to run a workflow for. A tag on it is a release that
+# never happens, silently: no run, no failure, no release. The tag therefore
+# names the commit below those record commits - the tree the release was cut
+# from, which is also what makes a stable release of a candidate identical to
+# the candidate. Any other commit that carries a skip token is refused rather
+# than stepped over, since content below it would be left out of the release.
 #
 # Exit codes: 0 success; 1 a precondition failed; 2 usage or version shape.
 #
@@ -121,8 +137,29 @@ if git -C "$repo_root" ls-remote --exit-code --quiet --tags origin "refs/tags/${
   exit 1
 fi
 
-git -C "$repo_root" tag "$tag"
+# The commit the tag names: past the release job's own record commits, and never
+# one that carries a workflow-skip token. Both are explained in the header -
+# briefly, a tag on a `[skip ci]` commit releases nothing at all, because GitHub
+# creates no run for a push whose head commit carries the token.
+target="$(git -C "$repo_root" rev-parse HEAD)"
+while [[ "$(git -C "$repo_root" show -s --format=%s "$target")" =~ ^chore\(release\):\ record\ release- ]]; do
+  echo "stepping past $(git -C "$repo_root" rev-parse --short "$target") ($(git -C "$repo_root" show -s --format=%s "$target"))"
+  parent="$(git -C "$repo_root" rev-parse --quiet --verify "${target}^")" || parent=""
+  if [ -z "$parent" ]; then
+    echo "every commit from HEAD back is a release record commit - there is nothing left to cut ${tag} from" >&2
+    exit 1
+  fi
+  target="$parent"
+done
+
+if [[ "$(git -C "$repo_root" show -s --format=%B "$target")" =~ \[skip\ ci\]|\[ci\ skip\]|\[no\ ci\]|\[skip\ actions\]|\[actions\ skip\]|skip-checks: ]]; then
+  echo "${tag} would name $(git -C "$repo_root" rev-parse --short "$target") ($(git -C "$repo_root" show -s --format=%s "$target")), which carries a workflow-skip token: GitHub creates no run for it, so the release would never happen" >&2
+  echo "push a commit without the token and cut the tag again, or tag a commit that already has none" >&2
+  exit 1
+fi
+
+git -C "$repo_root" tag "$tag" "$target"
 git -C "$repo_root" push --quiet origin "refs/tags/${tag}"
 
-echo "pushed ${tag} (${channel} track); the release runs once the gates pass:"
-echo "  gh run list --workflow=release.yml --limit 1"
+echo "pushed ${tag} (${channel} track) at $(git -C "$repo_root" rev-parse --short "$target"); the release runs once the gates pass:"
+echo "  gh run list --workflow=ci.yml --limit 1"

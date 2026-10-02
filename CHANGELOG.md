@@ -2,7 +2,7 @@
 
 All notable changes to krot. The section for a released version is published as
 that GitHub release's body by the `release` job in
-`.github/workflows/release.yml`.
+`.github/workflows/ci.yml`.
 
 Versions come from the git tag, not from a hand-edited `Chart.yaml`: the tag is
 `release-<version>`, where `<version>` is either a stable release (`0.2.0`) or a
@@ -21,6 +21,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   derived subscription tokens, used verbatim and defaulting to `krot-sub:`.
   Setting `cheburnet-sub:` keeps subscription URLs issued by a pre-rename
   corporate instance valid byte-for-byte.
+
+### Changed
+
+- The release pipeline is one workflow and the publish job depends on every
+  gate, so a red gate blocks the release instead of failing alongside it.
+- `hack/release.sh` tags the commit below the release job's
+  `chore(release): record <tag> [skip ci]` record commits and refuses to cut a
+  tag from a commit carrying a workflow-skip token, because GitHub creates no
+  run for such a push — the tag would silently release nothing.
+- The packaged charts carry `appVersion` = the released version, so the default
+  image tag follows the release rather than the previous one.
+- The gh-pages index is published with pinned chart-releaser
+  (`--release-name-template 'release-{{ .Version }}'`) instead of the
+  hand-rolled `helm repo index` step.
 
 ## [0.1.1] - 2026-09-25
 
