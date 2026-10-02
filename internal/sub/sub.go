@@ -2,7 +2,7 @@
 // control plane database on every fetch.
 //
 // Users are identified by their directory subject and carry no stored token:
-// the subscription token is derived — Token(tokenKey, subject) — so no
+// the subscription token is derived — Token(tokenKey, namespace, subject) — so no
 // credential lives in the ConfigMap. Each /sub/{token} fetch resolves the
 // token against the active user set (constant-time comparison), re-checks live
 // group membership through Authorizer (verdict cache plus fail-open grace in
@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	// tokenPrefix namespaces the HMAC message so the key cannot be reused
-	// against other HMAC schemes sharing it.
-	tokenPrefix = "krot-sub:" // #nosec G101 -- HMAC input namespace, not a credential.
+	// DefaultTokenNamespace namespaces the HMAC message so the key cannot be
+	// reused against other HMAC schemes sharing it. The control plane
+	// overrides it via KROT_TOKEN_NAMESPACE.
+	DefaultTokenNamespace = "krot-sub:" // #nosec G101 -- HMAC input namespace, not a credential.
 	// tokenBytes is the derived-token length in bytes (128-bit space).
 	tokenBytes = 16
 )
@@ -70,12 +71,13 @@ type Authorizer interface {
 }
 
 // Token derives the subscription token for a user subject: the first tokenBytes
-// of HMAC-SHA256(key, "krot-sub:"+subject), base64url-encoded without
-// padding — 22 characters of a 128-bit space. Derived, never stored: stable
-// across pod restarts, unguessable without the key.
-func Token(key []byte, userUUID string) string {
+// of HMAC-SHA256(key, namespace+subject), base64url-encoded without padding —
+// 22 characters of a 128-bit space. The namespace is used verbatim, so changing
+// it changes every token; DefaultTokenNamespace is the default. Derived, never
+// stored: stable across pod restarts, unguessable without the key.
+func Token(key []byte, namespace, userUUID string) string {
 	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(tokenPrefix + userUUID))
+	mac.Write([]byte(namespace + userUUID))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:tokenBytes])
 }
 
@@ -89,20 +91,35 @@ func Render(u User) string {
 // the routing profile. Link sets are rendered live from the database on
 // every authorized fetch.
 type Server struct {
-	users    UserSource
-	authz    Authorizer
-	logger   *slog.Logger
-	profile  Profile
-	tokenKey []byte
+	users     UserSource
+	authz     Authorizer
+	logger    *slog.Logger
+	namespace string
+	profile   Profile
+	tokenKey  []byte
 }
 
 // New builds a Server over the database view and the live-membership
 // authorizer.
-func New(tokenKey []byte, profile Profile, users UserSource, authz Authorizer, logger *slog.Logger) *Server {
+func New(
+	tokenKey []byte,
+	namespace string,
+	profile Profile,
+	users UserSource,
+	authz Authorizer,
+	logger *slog.Logger,
+) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{tokenKey: tokenKey, profile: profile, users: users, authz: authz, logger: logger}
+	return &Server{
+		tokenKey:  tokenKey,
+		namespace: namespace,
+		profile:   profile,
+		users:     users,
+		authz:     authz,
+		logger:    logger,
+	}
 }
 
 // Handler returns the routed HTTP handler:
@@ -129,7 +146,7 @@ func (s *Server) TokenForUUID(ctx context.Context, subject string) (string, bool
 	}
 	for _, u := range users {
 		if u.Subject == subject {
-			return Token(s.tokenKey, u.Subject), true
+			return Token(s.tokenKey, s.namespace, u.Subject), true
 		}
 	}
 	return "", false
@@ -151,7 +168,7 @@ func (s *Server) lookup(ctx context.Context, token string) (model.User, bool) {
 	)
 	for _, u := range users {
 		if subtle.ConstantTimeCompare(
-			[]byte(token), []byte(Token(s.tokenKey, u.Subject)),
+			[]byte(token), []byte(Token(s.tokenKey, s.namespace, u.Subject)),
 		) == 1 {
 			match = u
 			found = 1

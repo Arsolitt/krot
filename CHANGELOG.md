@@ -13,6 +13,15 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.2] - 2026-10-02
+
+### Added
+
+- `KROT_TOKEN_NAMESPACE` on the control plane: the HMAC namespace prefix of
+  derived subscription tokens, used verbatim and defaulting to `krot-sub:`.
+  Setting `cheburnet-sub:` keeps subscription URLs issued by a pre-rename
+  corporate instance valid byte-for-byte.
+
 ## [0.1.1] - 2026-09-25
 
 ### Added

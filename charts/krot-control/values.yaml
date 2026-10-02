@@ -34,6 +34,9 @@ ingress:
 config:
   KROT_IDP: authentik
   KROT_BASE_URL: ""
+  # HMAC namespace prefix of subscription tokens, used verbatim. Set
+  # cheburnet-sub: to keep URLs issued by a pre-rename corporate instance valid.
+  KROT_TOKEN_NAMESPACE: "krot-sub:"
   KROT_OIDC_ISSUER: ""
   KROT_AUTHENTIK_URL: ""
   KROT_AUTHENTIK_GROUP: krot::vpn

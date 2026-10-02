@@ -66,8 +66,8 @@ const (
 // from the krot-cp-config ConfigMap, secrets from krot-cp-secrets
 // (both injected with envFrom).
 type config struct {
-	IDP                 string
-	ListenAddr          string
+	AuthentikGroup      string
+	AgentToken          string
 	ProfileTitle        string
 	ClientID            string
 	ClientSecret        string
@@ -75,16 +75,17 @@ type config struct {
 	ProfileSupport      string
 	BaseURL             string
 	DatabaseURL         string
-	AgentToken          string
+	TokenNamespace      string
 	AuthentikURL        string
-	AuthentikToken      string
-	AuthentikGroup      string
-	AuthentikAdminGroup string
 	ZitadelURL          string
+	ListenAddr          string
+	AuthentikAdminGroup string
+	AuthentikToken      string
 	ZitadelToken        string
 	ZitadelProjectID    string
 	ZitadelRole         string
 	ZitadelAdminRole    string
+	IDP                 string
 	CookieKey           []byte
 	TokenKey            []byte
 	ProfileIntervalH    int
@@ -182,6 +183,8 @@ func loadConfig() (config, error) {
 		ProfileIntervalH: envInt("KROT_PROFILE_UPDATE_INTERVAL_HOURS", defaultUpdateIntervalH),
 	}
 
+	cfg.TokenNamespace = envString("KROT_TOKEN_NAMESPACE", sub.DefaultTokenNamespace)
+
 	var err error
 	if cfg.TokenKey, err = decodeKey("KROT_TOKEN_KEY"); err != nil {
 		return config{}, err
@@ -260,7 +263,7 @@ func run() error {
 		return fmt.Errorf("happ routing profile: %w", err)
 	}
 
-	subs := sub.New(cfg.TokenKey, sub.Profile{
+	subs := sub.New(cfg.TokenKey, cfg.TokenNamespace, sub.Profile{
 		BaseURL:             cfg.BaseURL,
 		Title:               cfg.ProfileTitle,
 		SupportURL:          cfg.ProfileSupport,

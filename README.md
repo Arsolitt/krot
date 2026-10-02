@@ -145,6 +145,7 @@ answers `503` until it succeeds.
 | Variable | Default | Required | Description |
 | --- | --- | --- | --- |
 | `KROT_TOKEN_KEY` | — | always | Unpadded base64 of exactly 32 bytes (`openssl rand -base64 32 \| tr -d '='`); HMAC key for derived subscription tokens. |
+| `KROT_TOKEN_NAMESPACE` | `krot-sub:` | no | HMAC namespace prefix of subscription tokens, used verbatim; set `cheburnet-sub:` to keep subscription URLs issued by a pre-rename corporate instance valid. |
 | `KROT_COOKIE_KEY` | — | always | Unpadded base64 of exactly 32 bytes; key for the signed session cookie. |
 | `KROT_OIDC_CLIENT_ID` | — | always | OIDC client id of the portal application. |
 | `KROT_OIDC_CLIENT_SECRET` | — | always | OIDC client secret. |
@@ -191,9 +192,10 @@ selected provider needs; the error lists every missing name at once.
 `GET /sub/{token}` renders the user's links live from the database — one URI
 per enabled (server, inbound) pair — and answers `404` for an unknown token, a
 revoked user, or a subject that no longer holds the group/role. The token is
-derived, never stored: `base64url(HMAC-SHA256(KROT_TOKEN_KEY, "krot-sub:" +
-subject)[:16])`, so it is stable across restarts and unguessable without the
-key.
+derived, never stored: `base64url(HMAC-SHA256(KROT_TOKEN_KEY,
+KROT_TOKEN_NAMESPACE + subject)[:16])`, where `KROT_TOKEN_NAMESPACE` defaults to
+`krot-sub:` and is used verbatim, so it is stable across restarts and
+unguessable without the key.
 
 Response headers:
 
