@@ -27,7 +27,7 @@
 #      release whose body silently stayed empty;
 #   2. print the section;
 #   3. append the `**Full Changelog**: <compare URL>` line when the repository,
-#      the `release-<version>` tag and a previous `release-*` tag are all
+#      the `v<version>` tag and a previous `v*` tag are all
 #      resolvable. The previous tag follows the release's own track - a
 #      candidate compares against the tag that preceded it, a stable release
 #      against the previous stable one, so its compare range is the whole line
@@ -41,7 +41,7 @@
 #                                               resolved from this script's own location
 #                                               rather than from $PWD; set for tests)
 #
-# The tag prefix is `release-`, the same string `hack/release.sh` pushes and the
+# The tag prefix is `v`, the same string `hack/release.sh` pushes and the
 # release job attaches to.
 #
 # Needs bash and awk. Exits 0 with the body on stdout; 1 with a message on
@@ -119,9 +119,9 @@ if [ -z "$repo" ]; then
 fi
 repo="${repo%.git}"
 
-# The tag, from the fixed prefix: a release tag is `release-<version>`, the same
+# The tag, from the fixed prefix: a release tag is `v<version>`, the same
 # string `hack/release.sh` pushes and the release job attaches to.
-tag="release-${version}"
+tag="v${version}"
 
 # The previous release tag: the newest tag that is *older* than the released
 # version, so the compare range is the step that release made. A candidate
@@ -137,8 +137,8 @@ case "$version" in
 esac
 previous=""
 if [ -n "$repo" ]; then
-  if tags="$(git -C "$repo_root" tag --list 'release-*' 2>/dev/null)" && [ -n "$tags" ]; then
-    previous="$(awk -v version="$version" -v prefix="release-" -v skip_pre="$skip_prereleases" '
+  if tags="$(git -C "$repo_root" tag --list 'v*' 2>/dev/null)" && [ -n "$tags" ]; then
+    previous="$(awk -v version="$version" -v prefix="v" -v skip_pre="$skip_prereleases" '
       function older(a, b,   i, n, x, y) {
         # Version comparison on the numeric fields, with a release candidate
         # ranking below the release it is a candidate of.

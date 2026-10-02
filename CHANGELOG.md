@@ -5,7 +5,7 @@ that GitHub release's body by the `release` job in
 `.github/workflows/ci.yml`.
 
 Versions come from the git tag, not from a hand-edited `Chart.yaml`: the tag is
-`release-<version>`, where `<version>` is either a stable release (`0.2.0`) or a
+`v<version>`, where `<version>` is either a stable release (`0.2.0`) or a
 release candidate (`0.2.0-rc.1`). The section published is `## [<version>]` - a
 candidate publishes the section of the version it is a candidate of, so
 `0.2.0-rc.1` publishes `## [0.2.0]`. Write the section before cutting the first

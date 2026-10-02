@@ -306,8 +306,8 @@ tag is created by [`hack/release.sh`](hack/release.sh):
 
 | Track | Tag | GitHub release |
 | --- | --- | --- |
-| stable | `release-0.2.0` | normal, takes "Latest" |
-| release candidate | `release-0.2.0-rc.1` | pre-release, never "Latest" |
+| stable | `v0.2.0` | normal, takes "Latest" |
+| release candidate | `v0.2.0-rc.1` | pre-release, never "Latest" |
 
 1. Write the section the release body comes from: `## [<version>]` in
    [`CHANGELOG.md`](CHANGELOG.md). A candidate reuses the section of the version
@@ -334,7 +334,7 @@ tag is created by [`hack/release.sh`](hack/release.sh):
    (`krot-licenses-<version>.tar.gz`, carrying `LICENSE` and `licenses/`) as an
    extra asset, and publishes the chart repository index on the `gh-pages`
    branch with pinned chart-releaser
-   (`cr index --release-name-template 'release-{{ .Version }}'`).
+   (`cr index --release-name-template 'v{{ .Version }}'`).
 4. `release` then records the released version in both `charts/*/Chart.yaml` on
    `main`, in a `chore(release): record <tag> [skip ci]` commit — the tag is the
    source of truth and the branch follows it.
@@ -354,9 +354,9 @@ in [`ci.yml`](.github/workflows/ci.yml) and the
 ### CI gates
 
 Every pull request runs six jobs; the first five are the ones worth marking as
-required checks, and `release-tag` runs on a `release-*` tag push only. On that
-tag push the same gates run and the `release` job needs every one of them, so a
-red gate blocks the release instead of failing alongside it:
+required checks, and `release-tag` runs on a version tag (`v[0-9]*`) push only.
+On that tag push the same gates run and the `release` job needs every one of
+them, so a red gate blocks the release instead of failing alongside it:
 
 | Job | What it proves |
 | --- | --- |
@@ -365,7 +365,7 @@ red gate blocks the release instead of failing alongside it:
 | `charts` | `helm lint --strict` for both charts and every scenario, then `helm template` + `kubeconform -strict` for the defaults and every scenario on the Kubernetes versions in the workflow's `env:` block. |
 | `schema` | `charts/*/ci/invalid/*.yaml` is still refused by `values.schema.json`, `charts/*/ci/invalid-render/*.yaml` is still refused by the chart's own template guards, and every supported scenario still renders. |
 | `licenses` | The committed bundle is current: `make licenses` regenerates `licenses/` and the charts' `LICENSE` copies for the modules linked into the released binaries, and the job fails on any diff in those paths — run `make licenses` and commit the result after a dependency change. |
-| `release-tag` | A `release-*` tag push only: resolves the version, the channel and the CHANGELOG section the `release` job consumes, and refuses a tag that is not an ancestor of `origin/main`. |
+| `release-tag` | A version tag (`v[0-9]*`) push only: resolves the version, the channel and the CHANGELOG section the `release` job consumes, and refuses a tag that is not an ancestor of `origin/main`. |
 
 The chart fixtures come in three categories, one meaning each — a fixture in the
 wrong folder makes the job that owns it fail, not pass:

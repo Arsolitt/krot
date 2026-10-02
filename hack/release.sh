@@ -16,8 +16,8 @@
 # section of CHANGELOG.md - write the section for the version you will ship,
 # then cut candidates of it.
 #
-# The tag is `release-<version>`; <version> may carry that prefix
-# (`release-0.2.0-rc.1`), so the release job can pass `$GITHUB_REF_NAME`
+# The tag is `v<version>`; <version> may carry that prefix
+# (`v0.2.0-rc.1`), so the release job can pass `$GITHUB_REF_NAME`
 # straight through.
 #
 # --check prints, on stdout and only on success, the four facts the release job
@@ -26,7 +26,7 @@
 #   version=0.2.0-rc.1
 #   channel=rc
 #   section=0.2.0
-#   tag=release-0.2.0-rc.1
+#   tag=v0.2.0-rc.1
 #
 # Checks, in order - each one exits before anything is created:
 #   1. the version has one of the two shapes above;
@@ -44,15 +44,18 @@
 #      push is a push.
 #
 # The commit the tag names: a release pushes a record commit of its own to main
-# last (`chore(release): record release-<version> [skip ci]` - bookkeeping, the
+# last (`chore(release): record <tag> [skip ci]` - bookkeeping, the
 # version in `charts/*/Chart.yaml` and nothing else), written by the `release`
 # job in `ci.yml`. So the tip a maintainer finds after a candidate is exactly
 # the commit GitHub refuses to run a workflow for. A tag on it is a release that
 # never happens, silently: no run, no failure, no release. The tag therefore
 # names the commit below those record commits - the tree the release was cut
 # from, which is also what makes a stable release of a candidate identical to
-# the candidate. Any other commit that carries a skip token is refused rather
-# than stepped over, since content below it would be left out of the release.
+# the candidate. Record commits of both schemes are stepped over: the current
+# `v<version>` ones and the retired `release-<version>` ones, which still sit on
+# main below this rename. Any other commit that carries a skip token is refused
+# rather than stepped over, since content below it would be left out of the
+# release.
 #
 # Exit codes: 0 success; 1 a precondition failed; 2 usage or version shape.
 #
@@ -69,7 +72,7 @@ if [ "${1:-}" = "--check" ]; then
 fi
 
 if [ "$#" -ne 1 ] || [ -z "${1:-}" ]; then
-  echo "usage: hack/release.sh [--check] <version>   (e.g. 0.2.0, 0.2.0-rc.1 or release-0.2.0-rc.1)" >&2
+  echo "usage: hack/release.sh [--check] <version>   (e.g. 0.2.0, 0.2.0-rc.1 or v0.2.0-rc.1)" >&2
   exit 2
 fi
 
@@ -88,7 +91,7 @@ fi
 
 arg="$1"
 case "$arg" in
-  release-*) version="${arg#release-}" ;;
+  v*) version="${arg#v}" ;;
   *) version="$arg" ;;
 esac
 
@@ -103,7 +106,7 @@ else
   exit 2
 fi
 
-tag="release-${version}"
+tag="v${version}"
 
 # The section is the release body: a missing one has to fail here, before a tag
 # exists, not in the release job after the gates.
@@ -138,11 +141,13 @@ if git -C "$repo_root" ls-remote --exit-code --quiet --tags origin "refs/tags/${
 fi
 
 # The commit the tag names: past the release job's own record commits, and never
-# one that carries a workflow-skip token. Both are explained in the header -
+# one that carries a workflow-skip token. Record commits of both schemes are
+# stepped over - the current `v<version>` ones and the retired `release-<version>`
+# ones, which still sit on main. Both are explained in the header -
 # briefly, a tag on a `[skip ci]` commit releases nothing at all, because GitHub
 # creates no run for a push whose head commit carries the token.
 target="$(git -C "$repo_root" rev-parse HEAD)"
-while [[ "$(git -C "$repo_root" show -s --format=%s "$target")" =~ ^chore\(release\):\ record\ release- ]]; do
+while [[ "$(git -C "$repo_root" show -s --format=%s "$target")" =~ ^chore\(release\):\ record\ (release-|v)[0-9] ]]; do
   echo "stepping past $(git -C "$repo_root" rev-parse --short "$target") ($(git -C "$repo_root" show -s --format=%s "$target"))"
   parent="$(git -C "$repo_root" rev-parse --quiet --verify "${target}^")" || parent=""
   if [ -z "$parent" ]; then
