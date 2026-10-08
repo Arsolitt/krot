@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -42,19 +44,21 @@ const (
 
 // agent bundles the runtime state of one node agent.
 type agent struct {
-	ctx        context.Context
-	child      *exec.Cmd
-	client     *agentapi.Client
-	logger     *slog.Logger
-	workDir    string
-	singbox    string
-	healthAddr string
-	lastError  string
-	lastState  model.DesiredState
-	spec       model.Spec
-	interval   time.Duration
-	mu         sync.Mutex
-	stopping   bool
+	ctx          context.Context
+	child        *exec.Cmd
+	client       *agentapi.Client
+	logger       *slog.Logger
+	workDir      string
+	singbox      string
+	staticConfig string
+	dataDir      string
+	healthAddr   string
+	lastError    string
+	lastState    model.DesiredState
+	spec         model.Spec
+	interval     time.Duration
+	mu           sync.Mutex
+	stopping     bool
 }
 
 func main() {
@@ -73,7 +77,12 @@ func main() {
 	go ag.serveHealth(ctx, logger)
 
 	// Fast boot: start the last known config without waiting for the CP.
-	ag.bootstrap(ctx)
+	if err := ag.bootstrap(ctx); err != nil {
+		stop()
+		fmt.Fprintf(os.Stderr, "krot-agent: %v\n", err)
+		//nolint:gocritic // stop() releases the signal handler before the fatal exit.
+		os.Exit(1)
+	}
 
 	ag.loop(ctx)
 	ag.stopChild()
@@ -92,6 +101,28 @@ func newAgent(logger *slog.Logger) (*agent, error) {
 		return nil, fmt.Errorf("parse spec %s: %w", specPath, err)
 	}
 
+	// Static mode: KROT_STATIC_CONFIG points at an operator-owned sing-box
+	// config the agent supervises verbatim and never renders, so a spec that
+	// declares inbounds cannot be honoured.
+	workDir := envString("KROT_WORKDIR", defaultWorkDir)
+	staticConfig := os.Getenv("KROT_STATIC_CONFIG")
+	dataDir := workDir
+	if staticConfig != "" {
+		if len(spec.Inbounds) > 0 {
+			return nil, fmt.Errorf(
+				"static config mode requires an inbounds-free spec: %s declares %d inbounds",
+				specPath, len(spec.Inbounds),
+			)
+		}
+		if err := validateStaticConfig(staticConfig); err != nil {
+			return nil, err
+		}
+		dataDir = envString("KROT_STATIC_DATA_DIR", filepath.Dir(staticConfig))
+		if err := validateStaticDataDir(dataDir); err != nil {
+			return nil, err
+		}
+	}
+
 	interval, err := time.ParseDuration(envString("KROT_POLL_INTERVAL", defaultPollInterval.String()))
 	if err != nil {
 		return nil, fmt.Errorf("parse poll interval: %w", err)
@@ -107,14 +138,52 @@ func newAgent(logger *slog.Logger) (*agent, error) {
 	}
 
 	return &agent{
-		client:     agentapi.New(cpURL, token, nil),
-		spec:       spec,
-		workDir:    envString("KROT_WORKDIR", defaultWorkDir),
-		singbox:    envString("KROT_SINGBOX", defaultSingboxPath),
-		healthAddr: envString("KROT_HEALTH_ADDR", defaultHealthAddr),
-		interval:   interval,
-		logger:     logger,
+		client:       agentapi.New(cpURL, token, nil),
+		spec:         spec,
+		workDir:      workDir,
+		singbox:      envString("KROT_SINGBOX", defaultSingboxPath),
+		staticConfig: staticConfig,
+		dataDir:      dataDir,
+		healthAddr:   envString("KROT_HEALTH_ADDR", defaultHealthAddr),
+		interval:     interval,
+		logger:       logger,
 	}, nil
+}
+
+// validateStaticConfig fails fast unless the operator-owned static config
+// exists as a readable regular file.
+func validateStaticConfig(path string) error {
+	// #nosec G703 -- the path is operator configuration from env.
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("static config %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("static config %s: not a regular file", path)
+	}
+	// #nosec G703 -- the path is operator configuration from env.
+	if _, err := os.ReadFile(path); err != nil {
+		return fmt.Errorf("static config %s: %w", path, err)
+	}
+	return nil
+}
+
+// validateStaticDataDir fails fast unless the sing-box working directory (-D)
+// exists and is readable.
+func validateStaticDataDir(path string) error {
+	// #nosec G703 -- the path is operator configuration from env.
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("static data dir %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("static data dir %s: not a directory", path)
+	}
+	// #nosec G703 -- the path is operator configuration from env.
+	if _, err := os.ReadDir(path); err != nil {
+		return fmt.Errorf("static data dir %s: %w", path, err)
+	}
+	return nil
 }
 
 // loop polls the control plane until the context is cancelled.
@@ -134,8 +203,14 @@ func (a *agent) loop(ctx context.Context) {
 }
 
 // pollOnce performs one desired-state cycle: fetch, compare hash, re-render,
-// validate, restart the child, heartbeat.
+// validate, restart the child, heartbeat. In static mode the control plane is
+// only used for registration and heartbeats; the config never comes from it.
 func (a *agent) pollOnce(ctx context.Context) {
+	if a.staticConfig != "" {
+		a.pollStatic(ctx)
+		return
+	}
+
 	state, err := a.client.DesiredState(ctx, a.spec)
 	if err != nil {
 		a.logger.ErrorContext(ctx, "desired-state fetch failed", "error", err)
@@ -160,13 +235,57 @@ func (a *agent) pollOnce(ctx context.Context) {
 	}
 
 	a.setError("")
-	hashPath := filepath.Join(a.workDir, hashFileName)
-	if err := os.WriteFile(hashPath, []byte(state.Hash), os.FileMode(filePerm0600)); err != nil {
-		a.logger.ErrorContext(ctx, "persist applied hash failed", "error", err)
-	}
+	a.persistAppliedHash(ctx, state.Hash)
 	a.heartbeat(ctx, state.Hash)
 	a.logger.InfoContext(ctx, "config applied", "hash", state.Hash,
 		"inbounds", len(state.Inbounds), "users", len(state.Users))
+}
+
+// pollStatic performs one cycle in static mode: desired state is still fetched
+// so the node registers and heartbeats, but it never influences the config,
+// and a rejected spec must not clobber the supervised config's status.
+func (a *agent) pollStatic(ctx context.Context) {
+	state, err := a.client.DesiredState(ctx, a.spec)
+	if err != nil {
+		a.logger.ErrorContext(ctx, "desired-state fetch failed", "error", err)
+	} else {
+		a.lastState = state
+	}
+
+	a.heartbeat(ctx, a.reconcileStatic(ctx))
+}
+
+// reconcileStatic validates the operator-owned static config when its content
+// changed and restarts the child on success. It returns the hash of the config
+// considered applied: the new one on success, the running one on failure.
+func (a *agent) reconcileStatic(ctx context.Context) string {
+	hash, err := hashFile(a.staticConfig)
+	if err != nil {
+		err = fmt.Errorf("read static config: %w", err)
+		a.logger.ErrorContext(ctx, "static config unreadable; keeping running child", "error", err)
+		a.setError(err.Error())
+		return a.readAppliedHash()
+	}
+
+	applied := a.readAppliedHash()
+	if hash == applied {
+		// Only the content counts: a bare mtime touch must not restart.
+		a.setError("")
+		return hash
+	}
+
+	if err := a.check(ctx, a.staticConfig); err != nil {
+		err = fmt.Errorf("sing-box check: %w", err)
+		a.logger.ErrorContext(ctx, "static config failed check; keeping running child", "error", err)
+		a.setError(err.Error())
+		return applied
+	}
+
+	a.restartChild(a.staticConfig)
+	a.persistAppliedHash(ctx, hash)
+	a.setError("")
+	a.logger.InfoContext(ctx, "static config applied", "hash", hash)
+	return hash
 }
 
 // apply renders, validates (sing-box check) and activates the new config.
@@ -208,26 +327,46 @@ func (a *agent) apply(ctx context.Context, state model.DesiredState) error {
 // check runs sing-box check against a config file.
 func (a *agent) check(ctx context.Context, configPath string) error {
 	// #nosec G204 -- the binary path is operator configuration from env.
-	cmd := exec.CommandContext(ctx, a.singbox, "check", "-D", a.workDir, "-c", configPath)
+	cmd := exec.CommandContext(ctx, a.singbox, "check", "-D", a.dataDir, "-c", configPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: %s", err, truncateOutput(out))
 	}
 	return nil
 }
 
-// bootstrap starts the child from the on-disk config if one exists, before
-// the first successful poll.
-func (a *agent) bootstrap(ctx context.Context) {
+// bootstrap starts the child before the first successful poll: from the
+// operator-owned static config in static mode, from the last stored config in
+// dynamic mode. Static mode fails fast so a node never runs unvalidated.
+func (a *agent) bootstrap(ctx context.Context) error {
+	if a.staticConfig != "" {
+		hash, err := hashFile(a.staticConfig)
+		if err != nil {
+			return fmt.Errorf("read static config: %w", err)
+		}
+		if err := a.check(ctx, a.staticConfig); err != nil {
+			return fmt.Errorf("static config %s: sing-box check: %w", a.staticConfig, err)
+		}
+		a.startChild(a.staticConfig)
+		if !a.childRunning() {
+			return fmt.Errorf("static config %s: sing-box did not start", a.staticConfig)
+		}
+		a.setError("")
+		a.persistAppliedHash(ctx, hash)
+		a.logger.InfoContext(ctx, "static config started", "config", a.staticConfig, "hash", hash)
+		return nil
+	}
+
 	configPath := filepath.Join(a.workDir, configFileName)
 	if _, err := os.Stat(configPath); err != nil {
 		a.logger.InfoContext(ctx, "no stored config; waiting for control plane")
-		return
+		return nil //nolint:nilerr // a missing stored config is a normal dynamic-mode startup state.
 	}
 	if err := a.check(ctx, configPath); err != nil {
 		a.logger.ErrorContext(ctx, "stored config failed check; waiting for control plane", "error", err)
-		return
+		return nil
 	}
 	a.startChild(configPath)
+	return nil
 }
 
 // restartChild stops any running child and starts a new one.
@@ -246,7 +385,7 @@ func (a *agent) startChild(configPath string) {
 	}
 
 	// #nosec G204 -- the binary path is operator configuration from env.
-	cmd := exec.CommandContext(a.ctx, a.singbox, "run", "-D", a.workDir, "-c", configPath)
+	cmd := exec.CommandContext(a.ctx, a.singbox, "run", "-D", a.dataDir, "-c", configPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -353,6 +492,15 @@ func (a *agent) heartbeat(ctx context.Context, appliedHash string) {
 	}
 }
 
+// persistAppliedHash records the hash of the config the child runs, so later
+// cycles only restart it when the content actually changed.
+func (a *agent) persistAppliedHash(ctx context.Context, hash string) {
+	hashPath := filepath.Join(a.workDir, hashFileName)
+	if err := os.WriteFile(hashPath, []byte(hash), os.FileMode(filePerm0600)); err != nil {
+		a.logger.ErrorContext(ctx, "persist applied hash failed", "error", err)
+	}
+}
+
 // readAppliedHash loads the persisted applied hash (empty when never applied).
 func (a *agent) readAppliedHash() string {
 	data, err := os.ReadFile(filepath.Join(a.workDir, hashFileName))
@@ -360,6 +508,16 @@ func (a *agent) readAppliedHash() string {
 		return ""
 	}
 	return string(data)
+}
+
+// hashFile returns the hex-encoded sha256 of a file's content.
+func hashFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // version is the agent build identifier.

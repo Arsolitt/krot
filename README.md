@@ -184,8 +184,84 @@ selected provider needs; the error lists every missing name at once.
 | `KROT_POLL_INTERVAL` | `30s` | no | Desired-state poll interval. |
 | `KROT_SPEC` | `/etc/krot/agent.yaml` | no | Declared node spec (server name, endpoint, inbounds). |
 | `KROT_WORKDIR` | `/etc/krot` | no | Work directory: rendered `config.json`, staged config, certs, applied hash, sing-box cache. |
+| `KROT_STATIC_CONFIG` | — | no | Path to an operator-owned sing-box config JSON; enables static config passthrough (see below). |
+| `KROT_STATIC_DATA_DIR` | dir of `KROT_STATIC_CONFIG` | no | sing-box data directory passed as `-D` in static mode; set it explicitly when certs/rule-sets live outside the config's directory (reference layout: config `/etc/sing-box/config.json`, data `/var/lib/sing-box`). |
 | `KROT_SINGBOX` | `/usr/local/bin/sing-box` | no | sing-box binary used for `check` and `run`. |
 | `KROT_HEALTH_ADDR` | `127.0.0.1:18081` | no | Health endpoint address (`/healthz`). |
+
+### Static config passthrough (`krot-agent`)
+
+Some nodes serve credentials that are pinned by clients already deployed — not
+a config krot may re-render. Setting `KROT_STATIC_CONFIG` to such a config's
+path puts the agent into static mode: the file is the single source of truth
+for that node, and the agent supervises it unchanged. It never renders, merges,
+rewrites or parses the config, never writes into the config's directory, and
+hashes its bytes only. A static node declares no krot inbounds and emits no
+`/sub` links — that is expected; it still registers and heartbeats like any
+other node.
+
+- `KROT_STATIC_CONFIG` — path to the operator-owned sing-box config JSON;
+  static mode is enabled exactly when the variable is set.
+- `KROT_STATIC_DATA_DIR` — the sing-box data directory (certs, rule-sets)
+  passed as `-D`, defaulting to the directory of the config file. It is the
+  data directory, not the config's directory: in the reference layout the
+  config lives at `/etc/sing-box/config.json` while certs and rule-sets live
+  under `/var/lib/sing-box`, so such a deployment sets
+  `KROT_STATIC_DATA_DIR=/var/lib/sing-box` explicitly.
+
+In this mode the agent runs exactly `sing-box check` and `sing-box run` with
+`-D <data dir> -c <config>`. It re-validates and restarts the child only when
+the config file's content hash changes — an mtime-only touch does nothing —
+and a failed check keeps the currently running child and reports the error.
+Heartbeats carry the applied hash, the sha256 of the config file's bytes;
+`<KROT_WORKDIR>/applied.hash` is the only file written in this mode, so
+`KROT_WORKDIR` must be writable and must not be the config's directory.
+
+Startup fails fast with a clear error on a missing or unreadable config file,
+an unreadable data directory, a failing `sing-box check`, or a `KROT_SPEC`
+that declares non-empty `inbounds` — static nodes are operator-managed and
+declare none, so `inbounds: []` is valid. Desired state keeps being polled,
+for registration and heartbeats, but never influences the config; before the
+first control-plane contact the agent starts the child from the config on
+disk, so a static node boots offline.
+
+Pin the sing-box build the operator's config needs with `KROT_SINGBOX`; the
+live servers run `1.13.14-aa119e82` builds.
+
+An example deployment, mirroring the reference `arsolitt/sing-box-extended`
+compose file:
+
+```yaml
+services:
+  krot-agent:
+    image: ghcr.io/arsolitt/krot-agent:<version>
+    network_mode: host
+    user: root
+    cap_add: [NET_ADMIN, NET_RAW, NET_BIND_SERVICE, SYS_PTRACE]
+    volumes:
+      - ./sing-box/etc:/etc/sing-box:ro
+      - ./sing-box/data:/var/lib/sing-box
+      - ./krot:/var/lib/krot
+      - ./agent.yaml:/etc/krot/agent.yaml:ro
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      KROT_CP_URL: "https://vpn.example.com"
+      KROT_AGENT_TOKEN: "<agent token>"
+      KROT_SPEC: "/etc/krot/agent.yaml"
+      KROT_WORKDIR: "/var/lib/krot"
+      KROT_STATIC_CONFIG: "/etc/sing-box/config.json"
+      KROT_STATIC_DATA_DIR: "/var/lib/sing-box"
+```
+
+The minimal `agent.yaml` next to it; the node still registers, with no
+inbounds declared:
+
+```yaml
+server: vpn1
+endpoint: vpn1.example.com
+route_profile: proxy-server
+inbounds: []
+```
 
 ## Subscriptions and the public Happ routing routes
 

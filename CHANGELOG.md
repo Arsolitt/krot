@@ -13,6 +13,19 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2026-10-08
+
+### Added
+
+- Static config passthrough on the node agent: `KROT_STATIC_CONFIG` points at an
+  operator-owned sing-box config JSON that the agent supervises as-is (never
+  renders, merges or writes it), with `KROT_STATIC_DATA_DIR` as the `sing-box -D`
+  working directory; the config is re-validated and the child restarted only when
+  the file's content hash changes, a failed check keeps the running child, and
+  startup fails fast on a missing/unreadable config, an unreadable data
+  directory, a failing check or a spec that declares inbounds. Static nodes
+  register and heartbeat normally and emit no subscription links.
+
 ## [0.1.3] - 2026-10-02
 
 ### Fixed
