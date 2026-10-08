@@ -8,6 +8,8 @@
     "image",
     "secretName",
     "ingress",
+    "gatewayAPI",
+    "databaseTLS",
     "config",
     "resources"
   ],
@@ -133,6 +135,72 @@
         },
         "tlsSecret": {
           "description": "TLS secret name; empty renders the Ingress without a tls block.",
+          "type": "string"
+        }
+      }
+    },
+    "gatewayAPI": {
+      "description": "Gateway API exposure, the alternative to the Ingress: an HTTPRoute attached to an operator-owned Gateway whose listener terminates TLS (the chart creates no certificate).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "gatewayName": {
+          "description": "Name of the Gateway the HTTPRoute attaches to. Required whenever the route renders: an empty parentRef name is refused by the template, because the API server requires a name on every parentRef.",
+          "type": "string"
+        },
+        "gatewayNamespace": {
+          "description": "Namespace of the Gateway; empty renders the parentRef without a namespace, which the Gateway API reads as the HTTPRoute's own namespace.",
+          "type": "string"
+        },
+        "host": {
+          "description": "Hostname the route serves. Required whenever the route renders: a hostless HTTPRoute matches every host the listener serves, capturing traffic meant for other routes, so the template names the value instead.",
+          "type": "string"
+        }
+      }
+    },
+    "databaseTLS": {
+      "description": "PostgreSQL TLS material, projected into the pod at the fixed path /etc/krot/pg-tls and exported as PGSSLROOTCERT/PGSSLMODE (plus PGSSLCERT/PGSSLKEY with a client pair), which pgx reads for the migration and serving connections. The DSN needs no TLS parameters; explicit sslmode/sslrootcert in it win over the environment.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "sslmode": {
+          "description": "Exported as PGSSLMODE. verify-full and verify-ca are the modes the mounted CA material supports.",
+          "type": "string",
+          "enum": [
+            "verify-full",
+            "verify-ca"
+          ]
+        },
+        "caSecretName": {
+          "description": "Secret holding the CA certificate. Required whenever the volume renders: an empty source name is refused by the template, because the API server requires a name on every projected source.",
+          "type": "string"
+        },
+        "caKey": {
+          "description": "Key of the CA certificate within caSecretName; projected to the fixed path ca.crt.",
+          "type": "string"
+        },
+        "clientSecretName": {
+          "description": "Secret holding the client certificate pair; empty omits the client source and the PGSSLCERT/PGSSLKEY exports.",
+          "type": "string"
+        },
+        "certKey": {
+          "description": "Key of the client certificate within clientSecretName; projected to the fixed path tls.crt.",
+          "type": "string"
+        },
+        "keyKey": {
+          "description": "Key of the client private key within clientSecretName; projected to the fixed path tls.key.",
           "type": "string"
         }
       }

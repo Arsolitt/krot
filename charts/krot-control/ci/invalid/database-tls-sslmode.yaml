@@ -1,0 +1,24 @@
+# MUST be rejected: prefer is a pgx sslmode, but not one this chart wires CA
+# material for - pgx sets InsecureSkipVerify for it and keeps a plaintext
+# fallback, so the mounted CA would be inert. The schema restricts sslmode to
+# the two verifying modes the mounted volume exists to serve.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  tag: ""
+  pullPolicy: IfNotPresent
+
+secretName: krot-cp-secrets
+
+databaseTLS:
+  enabled: true
+  sslmode: prefer
+  caSecretName: krot-pg-ca
+  caKey: ca.crt
+  clientSecretName: ""
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

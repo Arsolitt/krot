@@ -54,6 +54,16 @@ wsIngress:
   tlsSecretName: ""
   readTimeout: "3600"
 
+# Gateway API alternative to wsIngress for the same vless_ws inbounds: one
+# HTTPRoute per node and inbound, attached to an existing Gateway whose
+# listener terminates TLS and governs the websockets' idle timeouts
+# (gatewayName required when enabled; gatewayNamespace empty means the release
+# namespace). The two are independent - an install can use either or both.
+gatewayAPI:
+  enabled: false
+  gatewayName: ""
+  gatewayNamespace: ""
+
 resources:
   requests:
     cpu: 50m

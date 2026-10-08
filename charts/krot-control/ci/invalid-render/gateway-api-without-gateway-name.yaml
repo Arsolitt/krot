@@ -1,0 +1,24 @@
+# MUST fail the render (not the schema): gatewayAPI.enabled with an empty
+# gatewayName renders `parentRefs: [{name: ""}]`, which the API server refuses
+# (`spec.parentRefs[0].name: Required value`), and the chart cannot default a
+# Gateway name - it does not know the operator's Gateway. The template refuses
+# it instead, naming the value.
+#
+# expect-error: gatewayAPI.gatewayName is required when gatewayAPI.enabled is true
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+
+secretName: krot-cp-secrets
+
+gatewayAPI:
+  enabled: true
+  gatewayName: ""
+  gatewayNamespace: envoy-gateway
+  host: vpn.ci.example
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

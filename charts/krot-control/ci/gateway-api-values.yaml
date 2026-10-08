@@ -1,0 +1,38 @@
+# Scenario: the portal published through a Gateway instead of an Ingress.
+#
+# Exercises the gatewayAPI branch: the HTTPRoute renders only when enabled,
+# attaches to the operator's Gateway in its own namespace (the listener there
+# terminates TLS; the chart creates no certificate), and carries a hostname
+# only when host is non-empty. ingress stays present but disabled - the two
+# exposure paths are independent.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  tag: ""
+  pullPolicy: IfNotPresent
+
+secretName: krot-cp-secrets
+
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  tlsSecret: ""
+
+gatewayAPI:
+  enabled: true
+  gatewayName: eg
+  gatewayNamespace: envoy-gateway
+  host: vpn.ci.example
+
+config:
+  KROT_IDP: authentik
+  KROT_BASE_URL: https://vpn.ci.example
+  KROT_OIDC_ISSUER: https://idp.ci.example
+  KROT_AUTHENTIK_URL: https://auth.ci.example
+  KROT_AUTHENTIK_GROUP: krot::vpn
+  KROT_AUTHENTIK_ADMIN_GROUP: krot::admins
+  KROT_LISTEN_ADDR: :8080
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

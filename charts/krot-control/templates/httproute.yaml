@@ -1,0 +1,32 @@
+{{- if .Values.gatewayAPI.enabled }}
+{{- $gatewayName := required "gatewayAPI.gatewayName is required when gatewayAPI.enabled is true" .Values.gatewayAPI.gatewayName }}
+{{- $host := required "gatewayAPI.host is required when gatewayAPI.enabled is true: a hostless route matches every host the listener serves" .Values.gatewayAPI.host }}
+# Gateway API alternative to the Ingress above: for clusters that expose through
+# an operator-owned Gateway (Envoy Gateway, Cilium, ...) instead of ingress-nginx.
+# The HTTPRoute attaches to that Gateway by name, and the listener there
+# terminates TLS - the chart creates no certificate. It is independent of
+# .Values.ingress; enable one, the other, or both.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: krot-cp
+  labels:
+    app.kubernetes.io/name: krot-cp
+    app.kubernetes.io/instance: krot
+spec:
+  parentRefs:
+    - name: {{ $gatewayName }}
+      {{- with .Values.gatewayAPI.gatewayNamespace }}
+      namespace: {{ . }}
+      {{- end }}
+  hostnames:
+    - {{ $host }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: krot-cp
+          port: 8080
+{{- end }}

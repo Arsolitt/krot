@@ -1,0 +1,27 @@
+# MUST be rejected: 'gatewayNamespce' is a typo for 'gatewayNamespace'. Unknown
+# keys inside gatewayAPI are the failure mode the schema catches here - Helm
+# ignores them, so the HTTPRoutes would attach to the Gateway in the release
+# namespace instead of the namespace that Gateway actually lives in.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-ws-ddg, type: vless_ws, listenPort: 9443, sni: front.ci.example}
+
+wsIngress:
+  className: nginx
+
+gatewayAPI:
+  enabled: true
+  gatewayName: eg
+  gatewayNamespce: envoy-gateway
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

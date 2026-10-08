@@ -39,10 +39,32 @@ spec:
                 name: krot-cp-config
             - secretRef:
                 name: {{ required "secretName is required: an empty name renders a secretRef the API server refuses" .Values.secretName }}
+          {{- if .Values.databaseTLS.enabled }}
+          # pgx (the driver behind KROT_DATABASE_URL) reads these for both the
+          # migrations and the serving connection; an explicit sslmode or
+          # sslrootcert in the DSN wins over the environment.
+          env:
+            - name: PGSSLROOTCERT
+              value: /etc/krot/pg-tls/ca.crt
+            - name: PGSSLMODE
+              value: {{ .Values.databaseTLS.sslmode | quote }}
+            {{- with .Values.databaseTLS.clientSecretName }}
+            - name: PGSSLCERT
+              value: /etc/krot/pg-tls/tls.crt
+            - name: PGSSLKEY
+              value: /etc/krot/pg-tls/tls.key
+            {{- end }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
+          {{- if .Values.databaseTLS.enabled }}
+          volumeMounts:
+            - name: pg-tls
+              mountPath: /etc/krot/pg-tls
+              readOnly: true
+          {{- end }}
           readinessProbe:
             httpGet:
               path: /readyz
@@ -63,3 +85,23 @@ spec:
             runAsNonRoot: true
             runAsUser: 1111
             runAsGroup: 2222
+      {{- if .Values.databaseTLS.enabled }}
+      volumes:
+        - name: pg-tls
+          projected:
+            sources:
+              - secret:
+                  name: {{ required "databaseTLS.caSecretName is required when databaseTLS.enabled is true" .Values.databaseTLS.caSecretName }}
+                  items:
+                    - key: {{ .Values.databaseTLS.caKey }}
+                      path: ca.crt
+              {{- with .Values.databaseTLS.clientSecretName }}
+              - secret:
+                  name: {{ . }}
+                  items:
+                    - key: {{ $.Values.databaseTLS.certKey }}
+                      path: tls.crt
+                    - key: {{ $.Values.databaseTLS.keyKey }}
+                      path: tls.key
+              {{- end }}
+      {{- end }}

@@ -28,6 +28,34 @@ ingress:
   host: ""
   tlsSecret: ""
 
+# Gateway API alternative to the Ingress above: publish through an
+# operator-owned Gateway (Envoy Gateway, Cilium, ...) with an HTTPRoute. The
+# listener on that Gateway terminates TLS; the chart creates no certificate.
+# The name and the host are required whenever enabled - a hostless HTTPRoute
+# would match every host the listener serves, capturing traffic meant for
+# other routes - and an empty namespace means the Gateway lives in the
+# release namespace.
+gatewayAPI:
+  enabled: false
+  gatewayName: ""
+  gatewayNamespace: ""
+  host: ""
+
+# PostgreSQL TLS material for sslmode=verify-full/verify-ca. The Secrets are
+# projected into the pod at the fixed path /etc/krot/pg-tls and the paths are
+# exported as PGSSLROOTCERT/PGSSLMODE (plus PGSSLCERT/PGSSLKEY when
+# clientSecretName is set), which pgx reads for the migration and serving
+# connections alike. The DSN in KROT_DATABASE_URL needs no TLS parameters;
+# an explicit sslmode/sslrootcert in it wins over the environment.
+databaseTLS:
+  enabled: false
+  sslmode: verify-full
+  caSecretName: ""
+  caKey: ca.crt
+  clientSecretName: ""
+  certKey: tls.crt
+  keyKey: tls.key
+
 # Non-secret environment, rendered into the krot-cp-config ConfigMap.
 # KROT_IDP selects the identity provider (authentik or zitadel); only the
 # selected provider's URL/group/role keys are read.

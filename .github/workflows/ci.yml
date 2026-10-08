@@ -72,6 +72,9 @@ env:
   HELM_VERSION: 4.2.4
   KUBECONFORM_VERSION: v0.8.0
   KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+  # Commit of datreeio/CRDs-catalog the CRD schemas (the Gateway API
+  # HTTPRoutes) are fetched from: a branch name would be a floating dependency.
+  CRDS_CATALOG_SHA: 63669a570e231d4f1f8396d229a1de512bcf0a34
   # Oldest and newest Kubernetes releases the rendered manifests are checked
   # against. kubeconform fetches these schemas from yannh/kubernetes-json-schema.
   KUBERNETES_VERSIONS: 1.31.0 1.37.0
@@ -184,8 +187,15 @@ jobs:
                 echo "::error::$chart $label rendered no resources"
                 exit 1
               fi
+              # The CRDs-catalog carries the CRD schemas, the Gateway API
+              # HTTPRoutes among them: without that location kubeconform has
+              # no schema for a CRD kind and the skipped-kind guard below
+              # would fail the job. The catalog is fetched at a pinned commit
+              # (CRDS_CATALOG_SHA above), not from a branch.
               summary=$(kubeconform -strict -summary -kubernetes-version "$k8s" \
-                -schema-location default "$manifest")
+                -schema-location default \
+                -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/${CRDS_CATALOG_SHA}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+                "$manifest")
               echo "$summary"
               if ! grep -qE "Summary: $expected resources? found" <<<"$summary"; then
                 echo "::error::$chart $label: kubeconform validated an unexpected number of resources (rendered $expected)"

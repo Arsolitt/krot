@@ -321,6 +321,14 @@ Notes for `charts/krot-control`:
   means the chart `appVersion`.
 - `ingress.enabled` defaults to `false`: no Ingress object is rendered unless
   you opt in, and the TLS block appears only when `ingress.tlsSecret` is set.
+- `gatewayAPI.enabled` defaults to `false`: the Gateway API alternative to
+  `ingress`. `gatewayAPI.gatewayName` (required when enabled) names the Gateway
+  the `krot-cp` HTTPRoute attaches to, `gatewayAPI.gatewayNamespace` covers a
+  Gateway in another namespace, and `gatewayAPI.host` (also required when
+  enabled) is the route's hostname — a hostless HTTPRoute would match every
+  host the listener serves, capturing traffic meant for other routes on a
+  shared Gateway. The Gateway's listener terminates TLS — the chart renders no
+  certificate. `ingress` and `gatewayAPI` are independent opt-ins.
 - `imagePullSecrets` (a list) and `podAnnotations` / `podLabels` (maps) are
   passed through to the Deployment.
 - `config` is rendered verbatim into the `krot-cp-config` ConfigMap (the
@@ -331,6 +339,45 @@ Notes for `charts/krot-control`:
   `KROT_OIDC_CLIENT_ID`, `KROT_OIDC_CLIENT_SECRET`, `KROT_DATABASE_URL`,
   `KROT_AGENT_TOKEN`, and the provider token
   (`KROT_AUTHENTIK_TOKEN` or `KROT_ZITADEL_TOKEN`).
+- `databaseTLS.enabled` defaults to `false`: PostgreSQL TLS material is mounted
+  read-only at `/etc/krot/pg-tls`, and `PGSSLROOTCERT` and `PGSSLMODE`
+  (`verify-full` by default, `verify-ca` also supported) are exported into the
+  container, so `KROT_DATABASE_URL` needs no inline TLS parameters.
+  `databaseTLS.caSecretName` (required when enabled) is the CA Secret, key
+  `databaseTLS.caKey` (default `ca.crt`); an optional
+  `databaseTLS.clientSecretName` adds a client certificate and exports
+  `PGSSLCERT`/`PGSSLKEY` (`certKey`/`keyKey`, defaults `tls.crt`/`tls.key`).
+  An explicit `sslmode` or `sslrootcert` in the DSN wins over the environment.
+
+```yaml
+# Gateway API instead of an Ingress, and PostgreSQL TLS for verify-full;
+# KROT_DATABASE_URL itself stays free of TLS parameters:
+gatewayAPI:
+  enabled: true
+  gatewayName: krot-gateway
+  # gatewayNamespace: gateway-system
+  host: vpn.example.com
+databaseTLS:
+  enabled: true
+  sslmode: verify-full
+  caSecretName: pg-core-ca          # CNPG: the cluster's <cluster>-ca secret
+  clientSecretName: krot-cp-pg-tls  # optional, keys tls.crt/tls.key
+```
+
+```sh
+# Gateway API instead of an Ingress
+helm install krot-control charts/krot-control --namespace krot \
+  --set gatewayAPI.enabled=true \
+  --set gatewayAPI.gatewayName=krot-gateway \
+  --set gatewayAPI.gatewayNamespace=gateway-system \
+  --set gatewayAPI.host=vpn.example.com
+
+# PostgreSQL TLS from a CNPG-style CA secret (kubectl get secret pg-core-ca)
+helm install krot-control charts/krot-control --namespace krot \
+  --set databaseTLS.enabled=true \
+  --set databaseTLS.caSecretName=pg-core-ca \
+  --set databaseTLS.clientSecretName=krot-cp-pg-tls
+```
 
 ```sh
 helm install krot-agent charts/krot-agent \
@@ -370,6 +417,13 @@ Notes for `charts/krot-agent`:
   (`wsIngress.className`, `wsIngress.tlsSecretName`, `wsIngress.readTimeout`),
   so a CDN edge can reach the agent through the cluster ingress instead of
   node ports.
+- `gatewayAPI.enabled` defaults to `false` and is the Gateway API alternative
+  to `wsIngress`: every (node, `vless_ws` inbound) pair gets an HTTPRoute on
+  the node's Service — hostname `sni`, path `wsPath` (default `/`) —
+  attached to the Gateway named by `gatewayAPI.gatewayName` (required when
+  enabled; `gatewayAPI.gatewayNamespace` when it lives in another namespace).
+  The Gateway's listener terminates TLS. The values are configured
+  independently of `wsIngress`.
 - `image.repository` defaults to `ghcr.io/arsolitt/krot-agent`; `image.tag`
   empty means the chart `appVersion`; `imagePullSecrets`, `podAnnotations` and
   `podLabels` behave as in the control chart.

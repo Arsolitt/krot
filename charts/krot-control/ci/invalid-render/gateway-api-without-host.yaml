@@ -1,0 +1,24 @@
+# MUST fail the render (not the schema): gatewayAPI.enabled with an empty host
+# renders an HTTPRoute with no hostnames, which the Gateway API reads as
+# "match every host the listener serves" - on a shared Gateway the route would
+# silently capture traffic meant for other routes. The schema requires the key,
+# so only an explicitly empty value reaches the template, and the template
+# refuses it.
+#
+# expect-error: gatewayAPI.host is required when gatewayAPI.enabled is true
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+
+secretName: krot-cp-secrets
+
+gatewayAPI:
+  enabled: true
+  gatewayName: eg
+  host: ""
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

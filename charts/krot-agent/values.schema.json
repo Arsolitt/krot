@@ -10,6 +10,7 @@
     "agentTokenSecretName",
     "nodes",
     "wsIngress",
+    "gatewayAPI",
     "resources"
   ],
   "definitions": {
@@ -264,6 +265,27 @@
           "description": "nginx proxy read/send timeout for the websocket inbounds, in seconds.",
           "type": "string",
           "pattern": "^[0-9]+$"
+        }
+      }
+    },
+    "gatewayAPI": {
+      "description": "Gateway API alternative to wsIngress: when enabled, one HTTPRoute per node and vless_ws inbound attaches to an existing Gateway whose listener terminates TLS. The two are independent - an install can use either or both. The key is required; enabled false renders nothing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "gatewayName": {
+          "description": "Name of the Gateway the HTTPRoutes attach to. Required whenever they render: an empty name renders a parentRef the API server refuses, so the template names the value instead.",
+          "type": "string"
+        },
+        "gatewayNamespace": {
+          "description": "Namespace of that Gateway; empty means the HTTPRoutes' own namespace, which is why it may be empty here.",
+          "type": "string"
         }
       }
     },

@@ -1,0 +1,25 @@
+# MUST be rejected: 'hosts' is not a chart key - the singular 'host' is.
+# Unknown keys inside gatewayAPI are the failure mode the schema catches:
+# Helm ignores them, so without the schema the route would render with no
+# hostnames at all and accept every host the listener matches.
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+  tag: ""
+  pullPolicy: IfNotPresent
+
+secretName: krot-cp-secrets
+
+gatewayAPI:
+  enabled: true
+  gatewayName: eg
+  gatewayNamespace: envoy-gateway
+  host: vpn.ci.example
+  hosts:
+    - vpn.ci.example
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}

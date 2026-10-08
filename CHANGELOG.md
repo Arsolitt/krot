@@ -13,6 +13,21 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Gateway API (HTTPRoute) support in both charts, opt-in alongside the
+  Ingress: `charts/krot-control` routes the portal and subscription endpoints
+  to `krot-cp`, and `charts/krot-agent` routes every `vless_ws` inbound to its
+  node's Service, each attached to an operator-provided Gateway whose listener
+  terminates TLS.
+- PostgreSQL TLS certificate mounting on `charts/krot-control`: `databaseTLS`
+  mounts a CA (and, optionally, a client certificate) read-only at
+  `/etc/krot/pg-tls` and exports `PGSSLROOTCERT`, `PGSSLMODE` (and, with a
+  client secret, `PGSSLCERT`/`PGSSLKEY`), so `KROT_DATABASE_URL` can use
+  `sslmode=verify-full` or `verify-ca` without inline TLS parameters.
+
 ## [0.2.0] - 2026-10-08
 
 ### Added

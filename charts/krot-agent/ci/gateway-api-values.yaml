@@ -1,0 +1,50 @@
+# Scenario: one node serving all three inbound kinds, with the HTTPRoutes the
+# gatewayAPI block renders alongside the wsIngress objects.
+#
+# Exercises the per-node render in coexistence mode - both fronting paths stay
+# independent: a Deployment, a spec ConfigMap, a Service and an Ingress for the
+# vless_ws inbound, plus one HTTPRoute attached to the eg Gateway in
+# envoy-gateway. The vless_reality and hysteria2 inbounds get neither: they are
+# reached on node ports, which is what hostNetwork is for.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+cpUrl: http://krot-cp:8080
+pollInterval: 60s
+agentTokenSecretName: krot-agent
+dnsPolicy: ClusterFirstWithHostNet
+
+nodes:
+  - name: vpn1
+    node: worker-1
+    endpoint: vpn1.ci.example
+    routeProfile: proxy-server
+    tolerations:
+      - {key: dedicated, operator: Exists, effect: NoSchedule}
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+      - {tag: hy2-in, type: hysteria2, listenPort: 8443, sni: cdn.ci.example}
+      - tag: vless-ws-ddg
+        type: vless_ws
+        listenPort: 9443
+        sni: front.ci.example
+        publicEndpoint: front.ci.example
+        publicPort: 443
+        wsPath: /up
+        originTls: false
+
+wsIngress:
+  className: nginx
+  tlsSecretName: front-ci-example-tls
+  readTimeout: "3600"
+
+gatewayAPI:
+  enabled: true
+  gatewayName: eg
+  gatewayNamespace: envoy-gateway
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

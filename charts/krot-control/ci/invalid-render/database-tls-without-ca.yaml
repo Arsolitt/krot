@@ -1,0 +1,23 @@
+# MUST fail the render (not the schema): databaseTLS.enabled with an empty
+# caSecretName renders a projected volume source the API server refuses
+# (`spec.template.spec.volumes[0].projected.sources[0].secret.name: Required
+# value`), and the chart cannot default a Secret name - the CA is the
+# operator's. The schema requires the key, so only an explicitly empty value
+# reaches the template, and the template refuses it.
+#
+# expect-error: databaseTLS.caSecretName is required when databaseTLS.enabled is true
+image:
+  repository: ghcr.io/arsolitt/krot-cp
+
+secretName: krot-cp-secrets
+
+databaseTLS:
+  enabled: true
+  caSecretName: ""
+
+config:
+  KROT_IDP: authentik
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}
