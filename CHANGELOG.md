@@ -43,6 +43,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   last dash, so a prerelease chart version (`0.2.0-rc.1`) never matched its
   already-indexed check, duplicating one chart of the release and dropping
   the other.
+- The Zitadel client failed to decode a live v4 ListAuthorizations response:
+  Connect-JSON encodes int64 as a string, so `pagination.totalResult` (`"2"`)
+  broke the identity sync with `json: cannot unmarshal string into ... of
+  type int`. The field now accepts both encodings, and the test stub emits
+  the real string form.
 
 ## [0.1.3] - 2026-10-02
 

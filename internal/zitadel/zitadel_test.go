@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -43,16 +44,58 @@ func stubAPI(
 	return srv, &seen
 }
 
-// writeAuthPage encodes one authorizations listing page.
+// writeAuthPage encodes one authorizations listing page with the real wire
+// encoding: Connect-JSON (proto3 JSON, like protojson) encodes the 64-bit
+// pagination.totalResult as a JSON string - a live Zitadel v4 answers
+// `"totalResult":"2"`, not `"totalResult":2`.
 func writeAuthPage(t *testing.T, w http.ResponseWriter, total int, rows ...apiAuthorization) {
 	t.Helper()
-	resp := listResponse{
-		Authorizations: rows,
-	}
-	resp.Pagination.TotalResult = total
+	page := struct {
+		Pagination struct {
+			TotalResult string `json:"totalResult"`
+		} `json:"pagination"`
+		Authorizations []apiAuthorization `json:"authorizations"`
+	}{Authorizations: rows}
+	page.Pagination.TotalResult = strconv.Itoa(total)
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if err := json.NewEncoder(w).Encode(page); err != nil {
 		t.Fatalf("encode stub page: %v", err)
+	}
+}
+
+// TestConnectInt64Unmarshal covers the encodings pagination.totalResult
+// arrives in: a proto3-JSON string (the live Zitadel v4 form), a JSON number
+// (the documented form), null and the empty string as zero, and garbage as an
+// error.
+func TestConnectInt64Unmarshal(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		in      string
+		want    connectInt64
+		wantErr bool
+	}{
+		{name: "string encoding", in: `"2"`, want: 2},
+		{name: "number encoding", in: `2`, want: 2},
+		{name: "null", in: `null`, want: 0},
+		{name: "empty string", in: `""`, want: 0},
+		{name: "garbage", in: `"abc"`, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var n connectInt64
+			err := json.Unmarshal([]byte(tc.in), &n)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("Unmarshal(%s) = %d, want an error", tc.in, n)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unmarshal(%s): %v", tc.in, err)
+			}
+			if n != tc.want {
+				t.Fatalf("Unmarshal(%s) = %d, want %d", tc.in, n, tc.want)
+			}
+		})
 	}
 }
 

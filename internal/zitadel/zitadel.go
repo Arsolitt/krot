@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -129,11 +130,32 @@ type apiAuthorization struct {
 	Roles []apiRole `json:"roles"`
 }
 
+// connectInt64 decodes a proto3-JSON int64: Connect-JSON (like protojson)
+// encodes 64-bit integers as strings, while the v2 API documentation shows
+// the same fields as numbers. Both encodings are accepted; null and the
+// empty string read as zero.
+type connectInt64 int64
+
+// UnmarshalJSON implements json.Unmarshaler for both encodings.
+func (n *connectInt64) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "null" || s == "" {
+		*n = 0
+		return nil
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return fmt.Errorf("connectInt64: %w", err)
+	}
+	*n = connectInt64(v)
+	return nil
+}
+
 // listResponse is the ListAuthorizations response body.
 type listResponse struct {
 	Authorizations []apiAuthorization `json:"authorizations"`
 	Pagination     struct {
-		TotalResult int `json:"totalResult"`
+		TotalResult connectInt64 `json:"totalResult"`
 	} `json:"pagination"`
 }
 
@@ -172,7 +194,7 @@ func (c *Client) Members(ctx context.Context) ([]model.Member, error) {
 			seen[a.User.ID] = struct{}{}
 			members = append(members, model.Member{Subject: a.User.ID, Username: displayName(a)})
 		}
-		if len(resp.Authorizations) == 0 || offset+len(resp.Authorizations) >= resp.Pagination.TotalResult {
+		if len(resp.Authorizations) == 0 || offset+len(resp.Authorizations) >= int(resp.Pagination.TotalResult) {
 			break
 		}
 		offset += len(resp.Authorizations)
