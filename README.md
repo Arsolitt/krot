@@ -409,8 +409,9 @@ tag is created by [`hack/release.sh`](hack/release.sh):
    CHANGELOG section as its body, attaches the license bundle
    (`krot-licenses-<version>.tar.gz`, carrying `LICENSE` and `licenses/`) as an
    extra asset, and publishes the chart repository index on the `gh-pages`
-   branch with pinned chart-releaser
-   (`cr index --release-name-template 'v{{ .Version }}'`).
+   branch with `helm repo index --merge` — not chart-releaser, whose
+   already-indexed check misreads a prerelease chart version (`0.2.0-rc.1`)
+   and cannot index a candidate's two charts without duplicating one.
 4. `release` then records the released version in both `charts/*/Chart.yaml` on
    `main`, in a `chore(release): record <tag> [skip ci]` commit — the tag is the
    source of truth and the branch follows it.

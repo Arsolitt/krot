@@ -26,6 +26,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   directory, a failing check or a spec that declares inbounds. Static nodes
   register and heartbeat normally and emit no subscription links.
 
+### Fixed
+
+- The `gh-pages` chart index is generated with `helm repo index --merge`
+  instead of chart-releaser: `cr index` v1.8.1 splits an asset name on the
+  last dash, so a prerelease chart version (`0.2.0-rc.1`) never matched its
+  already-indexed check, duplicating one chart of the release and dropping
+  the other.
+
 ## [0.1.3] - 2026-10-02
 
 ### Fixed

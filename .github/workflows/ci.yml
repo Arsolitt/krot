@@ -70,7 +70,6 @@ env:
   GO_VERSION_FILE: go.mod
   GOLANGCI_LINT_VERSION: v2.13.2
   HELM_VERSION: 4.2.4
-  CHART_RELEASER_VERSION: v1.8.1
   KUBECONFORM_VERSION: v0.8.0
   KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
   # Oldest and newest Kubernetes releases the rendered manifests are checked
@@ -538,10 +537,11 @@ jobs:
           echo "::notice::$TAG published from the ${CHANNEL} track with the CHANGELOG.md body"
 
       # The license bundle is a separate asset rather than a file inside
-      # .cr-release-packages: chart-releaser reads that directory as a set of
-      # chart packages, so anything non-chart in it breaks the index. The
-      # tarball is built from the tagged tree - the same tree the charts are
-      # packaged from - and read back with `tar -tzf` before it is uploaded,
+      # .cr-release-packages: the index step reads that directory as the set
+      # of chart packages to publish, so it holds chart packages and nothing
+      # else. The tarball is built from the tagged tree - the same tree the
+      # charts are packaged from - and read back with `tar -tzf` before it is
+      # uploaded,
       # because an archive that silently dropped the bundle would publish as
       # if it carried the notice. Uploading with `--clobber` keeps a re-run
       # idempotent, exactly like the chart upload above.
@@ -568,34 +568,58 @@ jobs:
           gh release upload "$TAG" "$asset" --clobber
           echo "::notice::$(basename "$asset") attached to ${TAG}"
 
-      # Only the pinned `cr` binary is taken from the action; its own release
-      # path packages "charts changed since the previous tag", which is not the
-      # contract here - the tag is what selects the version.
-      - name: Install chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
-        with:
-          version: ${{ env.CHART_RELEASER_VERSION }}
-          install_only: true
-
-      # `cr index` reads the release and its assets back out of GitHub and
-      # rewrites `index.yaml` on gh-pages; the packages it indexes are the ones
-      # this job built. It keeps its local copy of the index at
-      # `.cr-index/index.yaml` and does not create that directory, so it is
-      # created here first. `cr` looks the release up *by tag*: the tag it looks
-      # for is the release-name template it is given, and the template below
-      # names the prefix this pipeline pushes (`v<version>`). The default
-      # is `<chart>-<version>`, so without the template the lookup would fail.
+      # The chart repository index is generated with `helm repo index` rather
+      # than chart-releaser: `cr index` (v1.8.1 - the latest release, and
+      # current master) splits an asset name into chart and version on the last
+      # dash, so a prerelease version such as `0.2.0-rc.1` never matches its
+      # already-indexed check - `krot-agent-0.2.0-rc.1` is read as chart
+      # `krot-agent-0.2.0` and version `rc.1` - and it re-adds the release's
+      # first `.tgz` asset once per locally packaged chart instead of indexing
+      # each of them. The generated index is merged with the one already on
+      # gh-pages (an entry for the same chart and version is replaced, so a
+      # re-run is idempotent), and the asset URLs point at the release this
+      # job just created.
       - name: Publish the chart repository index
         env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-tag.outputs.tag }}
         run: |
           set -euo pipefail
           owner="${GITHUB_REPOSITORY%%/*}"
           repo="${GITHUB_REPOSITORY#*/}"
+          base="https://github.com/${owner}/${repo}/releases/download/${TAG}"
+
+          # The existing index, if the branch already carries one: merging
+          # keeps the versions published before this release in the repository.
+          rm -rf .cr-index
           mkdir -p .cr-index
-          cr index -o "$owner" -r "$repo" \
-            --release-name-template 'v{{ .Version }}' \
-            --push
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
+            git fetch --quiet origin gh-pages
+            if git show FETCH_HEAD:index.yaml > .cr-index/index.yaml 2>/dev/null; then
+              echo "::notice::merging into the index already on gh-pages"
+            else
+              rm -f .cr-index/index.yaml
+              echo "::notice::gh-pages carries no index.yaml yet; starting one"
+            fi
+          fi
+
+          helm repo index .cr-release-packages --url "$base" --merge .cr-index/index.yaml
+          mv .cr-release-packages/index.yaml .cr-index/index.yaml
+
+          # gh-pages holds the index and nothing else; .nojekyll keeps GitHub
+          # Pages from running Jekyll over it.
+          worktree="${RUNNER_TEMP}/gh-pages"
+          rm -rf "$worktree"
+          git worktree add --quiet --detach "$worktree" origin/gh-pages
+          cp .cr-index/index.yaml "$worktree/index.yaml"
+          touch "$worktree/.nojekyll"
+          git -C "$worktree" add index.yaml .nojekyll
+          if git -C "$worktree" diff --cached --quiet; then
+            echo "::notice::the index is unchanged; nothing to publish"
+          else
+            git -C "$worktree" commit --quiet --message "chore(index): publish ${TAG} [skip ci]"
+            git -C "$worktree" push --quiet origin HEAD:gh-pages
+            echo "::notice::index.yaml published for ${TAG}"
+          fi
 
       # The tag is the source of truth, so the branch records the release after
       # the fact: a commit whose only change is the version lines. Charts are
