@@ -57,6 +57,53 @@ var happDirectIPs = []string{
 	"255.255.255.255",
 }
 
+// happProxySites are the international rule sets the client-side routing
+// proxies explicitly, mirroring the travel-router profile (rulesets tags /
+// intlProxy): the Google and AI/dev suites, the messengers and the
+// cloud/CDN/hosting sets. With GlobalProxy they are belt and braces - the
+// fallback already tunnels whatever they match - but they keep a proxied
+// service proxied when it also matches a direct rule (the geoip:ru range, a
+// direct CIDR), which is exactly their role in the client rules where the
+// proxy tier is a real outbound choice.
+//
+// Every tag was verified present in the Loyalsoldier release of 2026-10-08
+// (1549 geosite categories) by enumerating the published geosite.dat. The
+// intlProxy entries no published dataset carries are omitted, as on the
+// direct side: the itdog lists (russia-inside, geoblock, news, cloudfront,
+// hetzner-full, ovh, google-meet, linode, haproxy) and the custom
+// cloudflare-full/community-v1/proxy-v1 sets.
+//
+// Order is part of the artifact: it reproduces the intlProxy order with the
+// omitted entries skipped, so a profile diff against the client rules is
+// line-for-line comparable. A tag appears once - itdog's youtube and
+// sagernet's geosite-youtube both map to geosite:youtube here.
+var happProxySites = []string{
+	"geosite:telegram",
+	"geosite:discord",
+	"geosite:meta",
+	"geosite:twitter",
+	"geosite:youtube",
+	"geosite:tiktok",
+	"geosite:cloudflare",
+	"geosite:hetzner",
+	"geosite:digitalocean",
+	"geosite:roblox",
+	"geosite:fastly",
+	"geosite:cdn77",
+	"geosite:amazon",
+	"geosite:microsoft",
+	"geosite:github",
+	"geosite:openai",
+	"geosite:google",
+	"geosite:akamai",
+	"geosite:oracle",
+	"geosite:category-dev",
+	"geosite:anthropic",
+	"geosite:deepseek",
+	"geosite:groq",
+	"geosite:shopify",
+}
+
 // happRoutingProfile is the Happ routing profile payload, mirroring the
 // client-side sing-box routing used on user devices: RU geosite categories,
 // geoip:ru and the private ranges go direct, ads are blocked, and
@@ -71,11 +118,14 @@ var happDirectIPs = []string{
 // lists are DirectIp/ProxyIp/BlockIp. The deprecated RemoteDns/DomesticDns
 // aliases some old profiles carry are deliberately not emitted.
 //
-// Known gap versus the sing-box client rules: the itdog "russia-outside" rule
-// set and the custom "direct-v1" list are not in the Loyalsoldier datasets, so
-// they cannot be expressed as geosite tags here and are omitted until a
-// self-hosted xray-format geosite.dat carries them. Traffic that only those
-// two lists matched is therefore proxied, not direct.
+// Known gaps versus the sing-box client rules: no published geodataset
+// carries the itdog lists (russia-outside on the direct side; russia-inside,
+// geoblock and the rest of the proxy side listed on happProxySites), the
+// custom direct-v1/proxy-v1 entries or the ip-check set - verified 2026-10-08
+// against Loyalsoldier (1549 geosite categories) and runetfreedom's
+// russia-v2ray-rules-dat (1543). A profile has exactly one Geositeurl, so
+// those cannot be mixed in without hosting a custom xray-format geosite.dat;
+// traffic they matched keeps being routed by the surrounding rules.
 type happRoutingProfile struct {
 	DNSHosts          map[string]string `json:"DnsHosts"`
 	DomainStrategy    string            `json:"DomainStrategy"`
@@ -118,9 +168,9 @@ func HappRoutingProfileJSON(name string) ([]byte, error) {
 		DNSHosts:          map[string]string{"dns.google": "8.8.8.8"},
 		DirectSites:       happDirectSites,
 		DirectIP:          happDirectIPs,
+		ProxySites:        happProxySites,
 		// Empty lists must marshal as [], not null: Happ treats null as
 		// "field absent" and would keep a stale list from a previous import.
-		ProxySites:     []string{},
 		ProxyIP:        []string{},
 		BlockSites:     []string{"geosite:category-ads-all"},
 		BlockIP:        []string{},

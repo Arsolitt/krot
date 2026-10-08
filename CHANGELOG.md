@@ -36,6 +36,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   client secret, `PGSSLCERT`/`PGSSLKEY`), so `KROT_DATABASE_URL` can use
   `sslmode=verify-full` or `verify-ca` without inline TLS parameters.
 
+### Changed
+
+- The public Happ routing profile (and the subscription `routing:` header)
+  names the international service sets explicitly: the Google and AI/dev
+  suites, Telegram, Discord and the cloud/CDN/hosting tags ride `ProxySites`
+  ahead of the global proxy, so a service that also matches a direct rule
+  stays tunnelled. The itdog and custom rule sets of the sing-box client
+  profile are not carried by any published geodataset and remain out of the
+  Happ profile.
+
 ### Fixed
 
 - The `gh-pages` chart index is generated with `helm repo index --merge`

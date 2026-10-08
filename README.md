@@ -284,8 +284,12 @@ Response headers:
 
 The routing profile splits traffic on the client: RU geosite categories,
 `geoip:ru` and the private ranges go direct, `geosite:category-ads-all` is
-blocked, and everything else is tunnelled (`GlobalProxy`). Geofile sources are
-the Loyalsoldier release assets, which Happ keeps in sync by default.
+blocked, the international service sets the client-side rules proxy ride
+`ProxySites` (the Google and AI/dev suites, Telegram, Discord and the cloud,
+CDN and hosting providers), and everything else is tunnelled (`GlobalProxy`).
+Geofile sources are the Loyalsoldier release assets, which Happ keeps in sync
+by default; the itdog and custom rule sets of the sing-box client profile are
+not carried by any published dataset and stay out of the Happ profile.
 
 Because the profile is identical for every client and holds no per-user data,
 it is also served unauthenticated:

@@ -116,6 +116,39 @@ func TestHappRoutingProfileRouting(t *testing.T) {
 		t.Errorf("BlockSites:\n got %q\nwant %q", got, wantBlock)
 	}
 
+	// The proxy tier mirrors the travel-router client rules (intlProxy) with
+	// the entries no published dataset carries skipped; every tag here was
+	// verified in the Loyalsoldier release of 2026-10-08.
+	wantProxy := []string{
+		"geosite:telegram",
+		"geosite:discord",
+		"geosite:meta",
+		"geosite:twitter",
+		"geosite:youtube",
+		"geosite:tiktok",
+		"geosite:cloudflare",
+		"geosite:hetzner",
+		"geosite:digitalocean",
+		"geosite:roblox",
+		"geosite:fastly",
+		"geosite:cdn77",
+		"geosite:amazon",
+		"geosite:microsoft",
+		"geosite:github",
+		"geosite:openai",
+		"geosite:google",
+		"geosite:akamai",
+		"geosite:oracle",
+		"geosite:category-dev",
+		"geosite:anthropic",
+		"geosite:deepseek",
+		"geosite:groq",
+		"geosite:shopify",
+	}
+	if got := happStringList(t, profile, "ProxySites"); !reflect.DeepEqual(got, wantProxy) {
+		t.Errorf("ProxySites:\n got %q\nwant %q", got, wantProxy)
+	}
+
 	// The profile is read by key, and a mistyped key is a silent no-op: Happ
 	// drops the value and keeps whatever the previous profile held. Pin the
 	// exact documented key set on the wire bytes, Happ's capitalisation
@@ -139,7 +172,7 @@ func TestHappRoutingProfileRouting(t *testing.T) {
 	// An empty list has to survive as [], not null: null reads as "absent" and
 	// the client keeps whatever the previous profile held. Assert on the wire
 	// bytes, since both shapes unmarshal to the same empty slice here.
-	for _, key := range []string{"ProxySites", "ProxyIp", "BlockIp"} {
+	for _, key := range []string{"ProxyIp", "BlockIp"} {
 		if !strings.Contains(raw, `"`+key+`":[]`) {
 			t.Errorf("%s is not serialized as an empty array: %s", key, raw)
 		}
