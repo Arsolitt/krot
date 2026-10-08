@@ -5,22 +5,7 @@ entries:
       artifacthub.io/license: AGPL-3.0-or-later
     apiVersion: v2
     appVersion: 0.2.0-rc.1
-    created: "2026-10-08T13:34:35.247104994Z"
-    description: 'Krot proxy node agents: sing-box supervised by the control plane'
-    digest: 6ef96ee3c693fab4f0f2ebb28799e08f3f0a32ee58ff554aee275147afe0006b
-    home: https://github.com/Arsolitt/krot
-    name: krot-agent
-    sources:
-    - https://github.com/Arsolitt/krot
-    type: application
-    urls:
-    - https://github.com/Arsolitt/krot/releases/download/v0.2.0-rc.1/krot-agent-0.2.0-rc.1.tgz
-    version: 0.2.0-rc.1
-  - annotations:
-      artifacthub.io/license: AGPL-3.0-or-later
-    apiVersion: v2
-    appVersion: 0.2.0-rc.1
-    created: "2026-10-08T13:34:35.415072886Z"
+    created: "2026-10-08T16:39:34.255849+03:00"
     description: 'Krot proxy node agents: sing-box supervised by the control plane'
     digest: 6ef96ee3c693fab4f0f2ebb28799e08f3f0a32ee58ff554aee275147afe0006b
     home: https://github.com/Arsolitt/krot
@@ -75,6 +60,21 @@ entries:
   - annotations:
       artifacthub.io/license: AGPL-3.0-or-later
     apiVersion: v2
+    appVersion: 0.2.0-rc.1
+    created: "2026-10-08T16:39:34.256151+03:00"
+    description: 'Krot control plane: portal, subscriptions, agent API, identity sync'
+    digest: bf732a241978d540b97f5170c68cf7dbdd0e1d4c6d14d331cd79a8f7066486a9
+    home: https://github.com/Arsolitt/krot
+    name: krot-control
+    sources:
+    - https://github.com/Arsolitt/krot
+    type: application
+    urls:
+    - https://github.com/Arsolitt/krot/releases/download/v0.2.0-rc.1/krot-control-0.2.0-rc.1.tgz
+    version: 0.2.0-rc.1
+  - annotations:
+      artifacthub.io/license: AGPL-3.0-or-later
+    apiVersion: v2
     appVersion: 0.1.3
     created: "2026-10-02T14:06:24.686036507Z"
     description: 'Krot control plane: portal, subscriptions, agent API, identity sync'
@@ -112,4 +112,4 @@ entries:
     urls:
     - https://github.com/Arsolitt/krot/releases/download/v0.1.1/krot-control-0.1.1.tgz
     version: 0.1.1
-generated: "2026-10-08T13:34:35.415101378Z"
+generated: "2026-10-08T16:39:34.255022+03:00"
