@@ -24,22 +24,26 @@ import (
 	"github.com/Arsolitt/krot/internal/agentapi"
 	"github.com/Arsolitt/krot/internal/model"
 	"github.com/Arsolitt/krot/internal/render"
+	"github.com/Arsolitt/krot/internal/staticmerge"
 )
 
 // Defaults and fixed knobs.
 const (
-	defaultPollInterval = 30 * time.Second
-	defaultSpecPath     = "/etc/krot/agent.yaml"
-	defaultWorkDir      = "/etc/krot"
-	defaultSingboxPath  = "/usr/local/bin/sing-box"
-	defaultHealthAddr   = "127.0.0.1:18081"
-	cacheFileName       = "cache.db"
-	configFileName      = "config.json"
-	hashFileName        = "applied.hash"
-	filePerm0600        = 0o600
-	termWait            = 10 * time.Second
-	crashBackoff        = 5 * time.Second
-	healthReadHeader    = 10 * time.Second
+	defaultPollInterval      = 30 * time.Second
+	defaultSpecPath          = "/etc/krot/agent.yaml"
+	defaultWorkDir           = "/etc/krot"
+	defaultSingboxPath       = "/usr/local/bin/sing-box"
+	defaultHealthAddr        = "127.0.0.1:18081"
+	cacheFileName            = "cache.db"
+	configFileName           = "config.json"
+	hashFileName             = "applied.hash"
+	renderedFileName         = "rendered.json"
+	renderedHashFileName     = "rendered.hash"
+	renderedBaseHashFileName = "rendered.base.hash"
+	filePerm0600             = 0o600
+	termWait                 = 10 * time.Second
+	crashBackoff             = 5 * time.Second
+	healthReadHeader         = 10 * time.Second
 )
 
 // agent bundles the runtime state of one node agent.
@@ -48,16 +52,17 @@ type agent struct {
 	child        *exec.Cmd
 	client       *agentapi.Client
 	logger       *slog.Logger
-	workDir      string
+	healthAddr   string
 	singbox      string
 	staticConfig string
 	dataDir      string
-	healthAddr   string
+	workDir      string
 	lastError    string
 	lastState    model.DesiredState
 	spec         model.Spec
 	interval     time.Duration
 	mu           sync.Mutex
+	mergeTargets bool
 	stopping     bool
 }
 
@@ -102,18 +107,14 @@ func newAgent(logger *slog.Logger) (*agent, error) {
 	}
 
 	// Static mode: KROT_STATIC_CONFIG points at an operator-owned sing-box
-	// config the agent supervises verbatim and never renders, so a spec that
-	// declares inbounds cannot be honoured.
+	// config the agent supervises. Declared inbounds make the node a merge
+	// target: the control plane's active users are appended into the base
+	// inbounds they name, and only the rendered copy under the work dir is
+	// ever written. Without declarations the base is supervised verbatim.
 	workDir := envString("KROT_WORKDIR", defaultWorkDir)
 	staticConfig := os.Getenv("KROT_STATIC_CONFIG")
 	dataDir := workDir
 	if staticConfig != "" {
-		if len(spec.Inbounds) > 0 {
-			return nil, fmt.Errorf(
-				"static config mode requires an inbounds-free spec: %s declares %d inbounds",
-				specPath, len(spec.Inbounds),
-			)
-		}
 		if err := validateStaticConfig(staticConfig); err != nil {
 			return nil, err
 		}
@@ -143,6 +144,7 @@ func newAgent(logger *slog.Logger) (*agent, error) {
 		workDir:      workDir,
 		singbox:      envString("KROT_SINGBOX", defaultSingboxPath),
 		staticConfig: staticConfig,
+		mergeTargets: staticConfig != "" && len(spec.Inbounds) > 0,
 		dataDir:      dataDir,
 		healthAddr:   envString("KROT_HEALTH_ADDR", defaultHealthAddr),
 		interval:     interval,
@@ -204,9 +206,14 @@ func (a *agent) loop(ctx context.Context) {
 
 // pollOnce performs one desired-state cycle: fetch, compare hash, re-render,
 // validate, restart the child, heartbeat. In static mode the control plane is
-// only used for registration and heartbeats; the config never comes from it.
+// only used for registration and heartbeats; a merge node additionally takes
+// its users from it, and a dynamic node its whole config.
 func (a *agent) pollOnce(ctx context.Context) {
 	if a.staticConfig != "" {
+		if a.mergeTargets {
+			a.pollStaticMerged(ctx)
+			return
+		}
 		a.pollStatic(ctx)
 		return
 	}
@@ -288,6 +295,85 @@ func (a *agent) reconcileStatic(ctx context.Context) string {
 	return hash
 }
 
+// pollStaticMerged performs one cycle in merge mode: desired state is still
+// fetched so the node registers and heartbeats, but on a fetch failure the
+// previously known users are kept; on success its users feed the render.
+func (a *agent) pollStaticMerged(ctx context.Context) {
+	state, err := a.client.DesiredState(ctx, a.spec)
+	if err != nil {
+		a.logger.ErrorContext(ctx, "desired-state fetch failed", "error", err)
+	} else {
+		a.lastState = state
+	}
+
+	a.heartbeat(ctx, a.reconcileMerged(ctx))
+}
+
+// reconcileMerged renders the operator-owned base with the desired users
+// appended into the declared targets and activates the result when its bytes
+// changed. It returns the hash of the config considered applied: the rendered
+// one on success, the running one on failure. The base config and its
+// directory are only ever read; every write lands under the work dir.
+func (a *agent) reconcileMerged(ctx context.Context) string {
+	base, err := os.ReadFile(a.staticConfig)
+	if err != nil {
+		err = fmt.Errorf("read static config: %w", err)
+		a.logger.ErrorContext(ctx, "static config unreadable; keeping running child", "error", err)
+		a.setError(err.Error())
+		return a.readAppliedHash()
+	}
+	rendered, err := staticmerge.Render(staticmerge.Options{
+		Base: base, DataDir: a.dataDir, Decls: a.spec.Inbounds, Users: a.lastState.Users,
+	})
+	if err != nil {
+		err = fmt.Errorf("render merged config: %w", err)
+		a.logger.ErrorContext(ctx, "merge render failed; keeping running child", "error", err)
+		a.setError(err.Error())
+		return a.readAppliedHash()
+	}
+
+	renderedHash := hashBytes(rendered)
+	if renderedHash == a.readRenderedHash() {
+		// The child already runs these bytes: only the status clears.
+		a.setError("")
+		return a.readAppliedHash()
+	}
+
+	newPath := filepath.Join(a.workDir, renderedFileName+".new")
+	if err := os.WriteFile(newPath, rendered, os.FileMode(filePerm0600)); err != nil {
+		err = fmt.Errorf("write staged rendered config: %w", err)
+		a.logger.ErrorContext(ctx, "write staged rendered config failed", "error", err)
+		a.setError(err.Error())
+		return a.readAppliedHash()
+	}
+	if err := a.check(ctx, newPath); err != nil {
+		_ = os.Remove(newPath)
+		err = fmt.Errorf("sing-box check: %w", err)
+		a.logger.ErrorContext(ctx, "rendered config failed check; keeping running child", "error", err)
+		a.setError(err.Error())
+		return a.readAppliedHash()
+	}
+
+	finalPath := filepath.Join(a.workDir, renderedFileName)
+	if err := os.Rename(newPath, finalPath); err != nil {
+		err = fmt.Errorf("activate rendered config: %w", err)
+		a.logger.ErrorContext(ctx, "activate rendered config failed", "error", err)
+		a.setError(err.Error())
+		return a.readAppliedHash()
+	}
+
+	baseHash := hashBytes(base)
+	applied := chainHashes(baseHash, renderedHash)
+	a.restartChild(finalPath)
+	a.persistRenderedHash(ctx, renderedHash)
+	a.persistRenderedBaseHash(ctx, baseHash)
+	a.persistAppliedHash(ctx, applied)
+	a.setError("")
+	a.logger.InfoContext(ctx, "merged config applied", "config", finalPath, "hash", applied,
+		"users", len(a.lastState.Users))
+	return applied
+}
+
 // apply renders, validates (sing-box check) and activates the new config.
 // The running child is only replaced after the check passes.
 func (a *agent) apply(ctx context.Context, state model.DesiredState) error {
@@ -335,10 +421,14 @@ func (a *agent) check(ctx context.Context, configPath string) error {
 }
 
 // bootstrap starts the child before the first successful poll: from the
-// operator-owned static config in static mode, from the last stored config in
-// dynamic mode. Static mode fails fast so a node never runs unvalidated.
+// operator-owned static config in static mode — where a merge node prefers its
+// stored render when that still matches the base — from the last stored config
+// in dynamic mode. Static mode fails fast so a node never runs unvalidated.
 func (a *agent) bootstrap(ctx context.Context) error {
 	if a.staticConfig != "" {
+		if a.mergeTargets {
+			return a.bootstrapMerged(ctx)
+		}
 		hash, err := hashFile(a.staticConfig)
 		if err != nil {
 			return fmt.Errorf("read static config: %w", err)
@@ -367,6 +457,64 @@ func (a *agent) bootstrap(ctx context.Context) error {
 	}
 	a.startChild(configPath)
 	return nil
+}
+
+// bootstrapMerged starts the child in merge mode: from the stored rendered
+// config when it still belongs to the current base and passes check, from the
+// base itself otherwise. The declarations are validated against the base
+// either way so a merge node never runs a config the base cannot serve.
+func (a *agent) bootstrapMerged(ctx context.Context) error {
+	base, err := os.ReadFile(a.staticConfig)
+	if err != nil {
+		return fmt.Errorf("read static config: %w", err)
+	}
+	opts := staticmerge.Options{Base: base, DataDir: a.dataDir, Decls: a.spec.Inbounds}
+	if err := staticmerge.Validate(opts); err != nil {
+		return fmt.Errorf("static config %s: %w", a.staticConfig, err)
+	}
+	baseHash := hashBytes(base)
+
+	storedPath := filepath.Join(a.workDir, renderedFileName)
+	if renderedHash, ok := a.storedRenderHash(ctx, storedPath, baseHash); ok {
+		a.startChild(storedPath)
+		if !a.childRunning() {
+			return fmt.Errorf("static config %s: sing-box did not start", a.staticConfig)
+		}
+		a.setError("")
+		a.persistRenderedHash(ctx, renderedHash)
+		a.persistAppliedHash(ctx, chainHashes(baseHash, renderedHash))
+		a.logger.InfoContext(ctx, "stored merged config started", "config", storedPath, "hash", renderedHash)
+		return nil
+	}
+
+	if err := a.check(ctx, a.staticConfig); err != nil {
+		return fmt.Errorf("static config %s: sing-box check: %w", a.staticConfig, err)
+	}
+	a.startChild(a.staticConfig)
+	if !a.childRunning() {
+		return fmt.Errorf("static config %s: sing-box did not start", a.staticConfig)
+	}
+	a.setError("")
+	a.persistRenderedHash(ctx, baseHash)
+	a.persistAppliedHash(ctx, chainHashes(baseHash, baseHash))
+	a.logger.InfoContext(ctx, "static config started", "config", a.staticConfig, "hash", baseHash)
+	return nil
+}
+
+// storedRenderHash returns the hash of the stored rendered config when that
+// file exists, still belongs to the base whose hash is passed and passes check.
+// A stored render that fails check is logged and reported unusable, so
+// bootstrap falls back to the base instead of running it.
+func (a *agent) storedRenderHash(ctx context.Context, path string, baseHash string) (string, bool) {
+	stored, err := os.ReadFile(path)
+	if err != nil || a.readRenderedBaseHash() != baseHash {
+		return "", false
+	}
+	if err := a.check(ctx, path); err != nil {
+		a.logger.ErrorContext(ctx, "stored rendered config failed check; using the base", "error", err)
+		return "", false
+	}
+	return hashBytes(stored), true
 }
 
 // restartChild stops any running child and starts a new one.
@@ -495,19 +643,59 @@ func (a *agent) heartbeat(ctx context.Context, appliedHash string) {
 // persistAppliedHash records the hash of the config the child runs, so later
 // cycles only restart it when the content actually changed.
 func (a *agent) persistAppliedHash(ctx context.Context, hash string) {
-	hashPath := filepath.Join(a.workDir, hashFileName)
-	if err := os.WriteFile(hashPath, []byte(hash), os.FileMode(filePerm0600)); err != nil {
-		a.logger.ErrorContext(ctx, "persist applied hash failed", "error", err)
+	a.persistHash(ctx, hashFileName, hash)
+}
+
+// persistRenderedHash records the hash of the rendered config the child runs.
+func (a *agent) persistRenderedHash(ctx context.Context, hash string) {
+	a.persistHash(ctx, renderedHashFileName, hash)
+}
+
+// persistRenderedBaseHash records the base the stored render was derived from,
+// so a base change invalidates the stored render.
+func (a *agent) persistRenderedBaseHash(ctx context.Context, hash string) {
+	a.persistHash(ctx, renderedBaseHashFileName, hash)
+}
+
+// persistHash writes one hash file under the work dir.
+func (a *agent) persistHash(ctx context.Context, name string, hash string) {
+	// #nosec G703 -- the file name is a fixed constant and the work dir is
+	// operator configuration from env.
+	if err := os.WriteFile(filepath.Join(a.workDir, name), []byte(hash), os.FileMode(filePerm0600)); err != nil {
+		a.logger.ErrorContext(ctx, "persist hash failed", "file", name, "error", err)
 	}
 }
 
 // readAppliedHash loads the persisted applied hash (empty when never applied).
 func (a *agent) readAppliedHash() string {
-	data, err := os.ReadFile(filepath.Join(a.workDir, hashFileName))
+	return a.readHash(hashFileName)
+}
+
+// readRenderedHash loads the hash of the stored render (empty when none was
+// ever rendered).
+func (a *agent) readRenderedHash() string {
+	return a.readHash(renderedHashFileName)
+}
+
+// readRenderedBaseHash loads the base the stored render belongs to (empty when
+// none was ever rendered).
+func (a *agent) readRenderedBaseHash() string {
+	return a.readHash(renderedBaseHashFileName)
+}
+
+// readHash loads one persisted hash file; a missing file reads as empty.
+func (a *agent) readHash(name string) string {
+	data, err := os.ReadFile(filepath.Join(a.workDir, name))
 	if err != nil {
 		return ""
 	}
 	return string(data)
+}
+
+// hashBytes returns the hex-encoded sha256 of data.
+func hashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // hashFile returns the hex-encoded sha256 of a file's content.
@@ -516,8 +704,13 @@ func hashFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
+	return hashBytes(data), nil
+}
+
+// chainHashes returns the applied hash of a merged config: sha256 over the
+// concatenated base and rendered hex hashes, so the applied hash covers both.
+func chainHashes(baseHash string, renderedHash string) string {
+	return hashBytes([]byte(baseHash + renderedHash))
 }
 
 // version is the agent build identifier.

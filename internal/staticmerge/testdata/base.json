@@ -1,0 +1,165 @@
+{
+  "log": {
+    "level": "fatal",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "local",
+        "tag": "dns-local"
+      },
+      {
+        "type": "tls",
+        "tag": "dns-remote",
+        "detour": "direct",
+        "server": "8.8.8.8",
+        "server_port": 853
+      }
+    ],
+    "rules": [
+      {
+        "rule_set": "geosite-category-ru",
+        "server": "dns-local"
+      }
+    ],
+    "final": "dns-remote",
+    "strategy": "prefer_ipv4"
+  },
+  "endpoints": [
+    {
+      "type": "wireguard",
+      "tag": "awg-in",
+      "name": "awg0",
+      "mtu": 1280,
+      "address": "10.242.1.1/24",
+      "private_key": "lrxzSZjsNHuUTYFZHckFQPZfHhcnVdJgGtlm30Y8cFM=",
+      "listen_port": 853,
+      "peers": [
+        {
+          "public_key": "1mcu80oBXv54ftADbiDaVJaksd/SkptZj8QX93SiaO8=",
+          "pre_shared_key": "vVOb4rp0XDhC6jc3yk0dQ00F5VvclYLljFfN8xfYbjM=",
+          "allowed_ips": "10.242.1.8/32"
+        },
+        {
+          "public_key": "BA9zSQibelellwTdHIjQX5x3rcIm23H4DQqFO2H/8vg=",
+          "pre_shared_key": "1mcu80oBXv54ftADbiDaVJaksd/SkptZj8QX93SiaO8=",
+          "allowed_ips": "10.242.1.9/32"
+        }
+      ]
+    }
+  ],
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "name": "svc-laptop",
+          "uuid": "45977ea3-f264-4671-bec9-5195fa960936",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "name": "svc-phone",
+          "uuid": "6161ef9d-f402-4eef-a32f-4c8b7942a876",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "name": "svc-router",
+          "uuid": "4d98bccb-310d-4b10-ba49-d41dfe5e416f",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "ams.example.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "ams.example.com",
+            "server_port": 443
+          },
+          "private_key": "IL2bdmlAR_0qZetL1YJb5Sta_sdIpI2oxpOUFirV1qo",
+          "short_id": [
+            "236205ea41fa19be",
+            "fd27ae508b2088d9",
+            "3afe3600d13f4df9"
+          ]
+        }
+      },
+      "multiplex": {
+        "enabled": true
+      },
+      "x-unknown-marker": {
+        "note": "opaque inbound field preserved verbatim"
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "hy2-in",
+      "listen": "::",
+      "listen_port": 443,
+      "up_mbps": 1000,
+      "down_mbps": 1000,
+      "obfs": {
+        "type": "salamander",
+        "password": "vveOBFzvj5ZRmPtcdqGHkfsh4XhyUL9l"
+      },
+      "users": [
+        {
+          "name": "svc-laptop",
+          "password": "-RmzzCxGTkOS-F0i68j1MYVFvbj5Ucdj"
+        },
+        {
+          "name": "svc-phone",
+          "password": "oTVXl8zbJaB5DDJxl50ccyFDlr-bVX0B"
+        },
+        {
+          "name": "svc-router",
+          "password": "2totCg8fZ9NtrFoBIrHQkk5jDA3fJmbU"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "ams.example.com",
+        "alpn": "h3",
+        "certificate_path": "certs/ams.example.com.crt",
+        "key_path": "certs/ams.example.com.key"
+      },
+      "masquerade": {
+        "type": "proxy",
+        "url": "https://ams.example.com",
+        "rewrite_host": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct",
+      "domain_resolver": "dns-local"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "action": "reject",
+        "method": "drop"
+      }
+    ],
+    "rule_set": [],
+    "final": "direct",
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-local"
+  },
+  "x-unknown-top-level": {
+    "note": "opaque top-level member preserved verbatim"
+  }
+}

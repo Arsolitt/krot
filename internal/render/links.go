@@ -16,6 +16,9 @@ import (
 // Link builds the subscription share-link URI for one enabled (server,
 // inbound) pair, using the inbound's public endpoint and port. Parameter
 // order and encoding reproduce the v1 subscription format byte for byte.
+// A hysteria2 pin comes from the inbound's certificate when it carries one,
+// otherwise from its stored pin_sha256 (static-mode base configs hold the
+// certificate, so the control plane keeps only the pin).
 func Link(server string, in model.Inbound, u model.User) (string, error) {
 	fragment := server + "-" + in.Tag
 
@@ -28,14 +31,14 @@ func Link(server string, in model.Inbound, u model.User) (string, error) {
 			url.QueryEscape(in.SNI), fragment,
 		), nil
 	case model.InboundHysteria2:
-		pin, err := xrayCertPin(in.CertPEM)
+		pin, err := hy2Pin(in)
 		if err != nil {
 			return "", fmt.Errorf("hysteria2 link: %w", err)
 		}
 		return fmt.Sprintf(
 			"hysteria2://%s@%s?alpn=h3&obfs=salamander&obfs-password=%s&pinSHA256=%s&sni=%s#%s",
 			u.Hy2Password, net.JoinHostPort(in.PublicEndpoint, strconv.Itoa(in.PublicPort)),
-			url.QueryEscape(in.ObfsPassword), pin,
+			url.QueryEscape(in.ObfsPassword), url.QueryEscape(pin),
 			url.QueryEscape(in.SNI), fragment,
 		), nil
 	case model.InboundVLESSWS:
@@ -69,4 +72,19 @@ func xrayCertPin(certPEM string) (string, error) {
 	}
 	sum := sha256.Sum256(block.Bytes)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// hy2Pin returns the pinSHA256 value for a hysteria2 link: the leaf-
+// certificate pin derived from the inbound's certificate when it carries
+// one, otherwise the stored pin_sha256 (static-mode base configs hold the
+// certificate, so the control plane keeps only the pin). An inbound with
+// neither cannot yield a client pin.
+func hy2Pin(in model.Inbound) (string, error) {
+	if in.CertPEM != "" {
+		return xrayCertPin(in.CertPEM)
+	}
+	if in.PinSHA256 != "" {
+		return in.PinSHA256, nil
+	}
+	return "", fmt.Errorf("pin: hysteria2 inbound %q has neither a certificate nor a pin_sha256", in.Tag)
 }

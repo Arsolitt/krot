@@ -3,14 +3,20 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Arsolitt/cheburbox/generate"
+
+	"github.com/Arsolitt/krot/internal/model"
 )
 
 // Fixture payloads. The fake sing-box rejects any config containing
@@ -41,12 +47,120 @@ inbounds:
 `
 )
 
+// Merge-mode fixture payloads: the base serves two legacy vless users and one
+// legacy hysteria2 user, and both inbounds are declared merge targets whose
+// pinned values the tests derive from the base.
+const (
+	mergeSNI               = "ams.example.com"
+	mergeVLESSTag          = "vless-in"
+	mergeHy2Tag            = "hy2-in"
+	mergeFlow              = "xtls-rprx-vision"
+	mergeRealityPrivateKey = "IL2bdmlAR_0qZetL1YJb5Sta_sdIpI2oxpOUFirV1qo"
+	mergeShortID           = "236205ea41fa19be"
+	mergeObfsPassword      = "fixture-obfs-password"
+	mergeListenPort        = 443
+	mergeLegacyVLESSUsers  = 2
+	mergeLegacyHy2Users    = 1
+	mergeCarolName         = "carol"
+	mergeCarolUUID         = "c4a1f0e2-8ab3-4c0e-9b1b-7b8a1c2d3e4f"
+	mergeCarolPass         = "carol-hy2-pass"
+	mergeDaveName          = "dave"
+	mergeDaveUUID          = "d5b2c3d4-1234-4abc-9def-0123456789ab"
+	mergeDavePass          = "dave-hy2-pass"
+
+	// The fake sing-box logs its invocations after it starts, so assertions on
+	// the run log poll for the expected line within this window.
+	mergeLogTimeout = 5 * time.Second
+	mergeLogPoll    = 10 * time.Millisecond
+)
+
+// mergeBaseConfig is the operator-owned base in the shape the chart renders: a
+// vless reality inbound with a private key, a multi-id short id list and
+// legacy users carrying a flow, plus a hysteria2 inbound with obfs and a
+// certificate the -D data dir holds. It carries no invalidMarker, so the fake
+// sing-box accepts it and every config rendered from it.
+const mergeBaseConfig = `{
+  "log": {
+    "level": "fatal",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "::",
+      "listen_port": 443,
+      "users": [
+        {
+          "name": "svc-laptop",
+          "uuid": "45977ea3-f264-4671-bec9-5195fa960936",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "name": "svc-phone",
+          "uuid": "6161ef9d-f402-4eef-a32f-4c8b7942a876",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "ams.example.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "ams.example.com",
+            "server_port": 443
+          },
+          "private_key": "IL2bdmlAR_0qZetL1YJb5Sta_sdIpI2oxpOUFirV1qo",
+          "short_id": [
+            "236205ea41fa19be",
+            "fd27ae508b2088d9"
+          ]
+        }
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "hy2-in",
+      "listen": "::",
+      "listen_port": 443,
+      "obfs": {
+        "type": "salamander",
+        "password": "fixture-obfs-password"
+      },
+      "users": [
+        {
+          "name": "svc-router",
+          "password": "2totCg8fZ9NtrFoBIrHQkk5jDA3fJmbU"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "ams.example.com",
+        "alpn": "h3",
+        "certificate_path": "certs/ams.example.com.crt",
+        "key_path": "certs/ams.example.com.key"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
+}
+`
+
 // singboxScript is the fake sing-box shared by all cycle tests: check exits 1
 // when the config contains invalidMarker, run execs a long-lived sleep, and
-// nothing ever touches the network.
+// nothing ever touches the network. Every invocation is appended to
+// SINGBOX_LOG when that variable is set, so tests can see which config the
+// child was told to run.
 const singboxScript = `#!/bin/sh
 cmd="$1"
 shift
+[ -n "$SINGBOX_LOG" ] && echo "$cmd $*" >> "$SINGBOX_LOG"
 cfg=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -172,24 +286,43 @@ func TestStaticReconcileFailedCheckKeepsChild(t *testing.T) {
 	requireAppliedHash(t, tree.workDir, oldHash)
 }
 
-// TestNewAgentRejectsStaticWithInboundSpec covers rule 4: static nodes are
-// operator-managed, so a spec that declares inbounds is a startup error.
-func TestNewAgentRejectsStaticWithInboundSpec(t *testing.T) {
+// TestNewAgentAcceptsStaticWithInboundSpec covers rule 4: a static node whose
+// spec declares inbounds runs in merge mode, while a declaration-free spec
+// stays a passthrough node.
+func TestNewAgentAcceptsStaticWithInboundSpec(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeFile(t, filepath.Join(root, configFileName), validConfig)
-	specPath := writeFile(t, filepath.Join(root, specFile), inboundSpec)
-	setenvCommon(t, specPath)
 	t.Setenv("KROT_STATIC_CONFIG", cfgPath)
+	t.Setenv("KROT_WORKDIR", root)
 
-	_, err := newAgent(discardLogger())
-	if err == nil {
-		t.Fatal("expected newAgent to reject a static node with declared inbounds")
-	}
-	for _, want := range []string{"inbounds", "static", specPath} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not mention %q", err, want)
+	t.Run("declared inbounds merge", func(t *testing.T) {
+		specPath := writeFile(t, filepath.Join(root, specFile), inboundSpec)
+		setenvCommon(t, specPath)
+
+		ag, err := newAgent(discardLogger())
+		if err != nil {
+			t.Fatalf("newAgent: %v", err)
 		}
-	}
+		if !ag.mergeTargets {
+			t.Error("mergeTargets = false, want true for a static node with declared inbounds")
+		}
+		if len(ag.spec.Inbounds) != 1 || ag.spec.Inbounds[0].Tag != "vless-in" {
+			t.Errorf("spec inbounds = %#v, want the declared vless-in", ag.spec.Inbounds)
+		}
+	})
+
+	t.Run("no declared inbounds passthrough", func(t *testing.T) {
+		specPath := writeFile(t, filepath.Join(root, specFile), emptySpec)
+		setenvCommon(t, specPath)
+
+		ag, err := newAgent(discardLogger())
+		if err != nil {
+			t.Fatalf("newAgent: %v", err)
+		}
+		if ag.mergeTargets {
+			t.Error("mergeTargets = true, want false for a static node without declared inbounds")
+		}
+	})
 }
 
 // TestNewAgentMissingStaticConfig covers rule 7: a missing static config fails
@@ -344,6 +477,390 @@ func TestStaticBootstrapHashPreventsFirstPollRestart(t *testing.T) {
 	requireHash(t, hash, want)
 }
 
+// TestStaticMergeBootstrap covers the merge-mode bootstrap rules: the stored
+// render is preferred while it still belongs to the base, a stale or rejected
+// one falls back to the base, and a declaration the base cannot serve fails
+// fast before any child starts.
+func TestStaticMergeBootstrap(t *testing.T) {
+	t.Run("starts the stored render", func(t *testing.T) {
+		tree := newMergeTree(t)
+		ag := testMergeAgent(t, tree)
+		ag.lastState.Users = mergeUsers()
+		ag.reconcileMerged(t.Context())
+		requireChild(t, ag)
+
+		boot := testMergeAgent(t, tree)
+		if err := boot.bootstrap(t.Context()); err != nil {
+			t.Fatalf("bootstrap: %v", err)
+		}
+		requireChild(t, boot)
+		requireLastRunConfig(t, tree.logPath, filepath.Join(tree.workDir, renderedFileName))
+
+		renderedHash := sha256Hex(readFileString(t, filepath.Join(tree.workDir, renderedFileName)))
+		if got := readFileString(t, filepath.Join(tree.workDir, renderedHashFileName)); got != renderedHash {
+			t.Errorf("rendered hash = %q, want %q", got, renderedHash)
+		}
+		requireAppliedHash(t, tree.workDir, chainHashes(sha256Hex(mergeBaseConfig), renderedHash))
+	})
+
+	t.Run("starts the base when the stored base hash is stale", func(t *testing.T) {
+		tree := newMergeTree(t)
+		ag := testMergeAgent(t, tree)
+		ag.lastState.Users = mergeUsers()
+		ag.reconcileMerged(t.Context())
+		requireChild(t, ag)
+
+		// An inert change: the declarations still match the base and the
+		// stored render still passes check, but it belongs to the old base.
+		changed := strings.Replace(mergeBaseConfig, `"timestamp": true`, `"timestamp": false`, 1)
+		writeFile(t, tree.cfgPath, changed)
+
+		boot := testMergeAgent(t, tree)
+		if err := boot.bootstrap(t.Context()); err != nil {
+			t.Fatalf("bootstrap: %v", err)
+		}
+		requireChild(t, boot)
+		requireLastRunConfig(t, tree.logPath, tree.cfgPath)
+
+		baseHash := sha256Hex(changed)
+		if got := readFileString(t, filepath.Join(tree.workDir, renderedHashFileName)); got != baseHash {
+			t.Errorf("rendered hash = %q, want the base hash %q", got, baseHash)
+		}
+		requireAppliedHash(t, tree.workDir, chainHashes(baseHash, baseHash))
+	})
+
+	t.Run("starts the base when the stored render fails check", func(t *testing.T) {
+		tree := newMergeTree(t)
+		writeFile(t, filepath.Join(tree.workDir, renderedFileName), mergeBaseConfig+invalidMarker)
+		writeFile(t, filepath.Join(tree.workDir, renderedBaseHashFileName), sha256Hex(mergeBaseConfig))
+
+		boot := testMergeAgent(t, tree)
+		if err := boot.bootstrap(t.Context()); err != nil {
+			t.Fatalf("bootstrap: %v", err)
+		}
+		requireChild(t, boot)
+		requireLastRunConfig(t, tree.logPath, tree.cfgPath)
+	})
+
+	t.Run("fails fast on a target mismatch", func(t *testing.T) {
+		tree := newMergeTree(t)
+		tree.decls[0].SNI = "other.example.com"
+		ag := testMergeAgent(t, tree)
+
+		err := ag.bootstrap(t.Context())
+		if err == nil {
+			t.Fatal("expected bootstrap to reject a declaration the base cannot serve")
+		}
+		if ag.childRunning() {
+			t.Error("child must not start when a declaration does not match the base")
+		}
+		for _, want := range []string{mergeVLESSTag, "sni", tree.cfgPath} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not mention %q", err, want)
+			}
+		}
+	})
+}
+
+// TestStaticMergeReconcile covers the merge reconcile: the desired users are
+// appended into both declared targets with the base's shape and flow, the
+// render is validated and activated, the child restarts, and all three merge
+// hashes advance under the work dir.
+func TestStaticMergeReconcile(t *testing.T) {
+	tree := newMergeTree(t)
+	ag := testMergeAgent(t, tree)
+	if err := ag.bootstrap(t.Context()); err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	basePid := requireChild(t, ag)
+
+	ag.lastState.Users = mergeUsers()
+	hash := ag.reconcileMerged(t.Context())
+
+	pid := requireChild(t, ag)
+	if pid == basePid {
+		t.Error("child not restarted on a merged render")
+	}
+	if got := ag.errorText(); got != "" {
+		t.Errorf("unexpected error state: %q", got)
+	}
+	rendered := readFileString(t, filepath.Join(tree.workDir, renderedFileName))
+	renderedHash := sha256Hex(rendered)
+	baseHash := sha256Hex(mergeBaseConfig)
+	requireHash(t, hash, chainHashes(baseHash, renderedHash))
+	if got := readFileString(t, filepath.Join(tree.workDir, renderedHashFileName)); got != renderedHash {
+		t.Errorf("rendered hash = %q, want %q", got, renderedHash)
+	}
+	if got := readFileString(t, filepath.Join(tree.workDir, renderedBaseHashFileName)); got != baseHash {
+		t.Errorf("rendered base hash = %q, want %q", got, baseHash)
+	}
+	requireAppliedHash(t, tree.workDir, chainHashes(baseHash, renderedHash))
+	requireLastRunConfig(t, tree.logPath, filepath.Join(tree.workDir, renderedFileName))
+
+	vlessUsers := inboundUsers(t, rendered, mergeVLESSTag)
+	if got, want := len(vlessUsers), mergeLegacyVLESSUsers+len(mergeUsers()); got != want {
+		t.Fatalf("vless users = %d, want %d", got, want)
+	}
+	for i, user := range mergeUsers() {
+		want := map[string]any{"name": user.Name, "uuid": user.VLESSUUID, "flow": mergeFlow}
+		if got := vlessUsers[mergeLegacyVLESSUsers+i]; !reflect.DeepEqual(got, want) {
+			t.Errorf("appended vless user %d = %#v, want %#v", i, got, want)
+		}
+	}
+	hy2Users := inboundUsers(t, rendered, mergeHy2Tag)
+	if got, want := len(hy2Users), mergeLegacyHy2Users+len(mergeUsers()); got != want {
+		t.Fatalf("hysteria2 users = %d, want %d", got, want)
+	}
+	for i, user := range mergeUsers() {
+		want := map[string]any{"name": user.Name, "password": user.Hy2Password}
+		if got := hy2Users[mergeLegacyHy2Users+i]; !reflect.DeepEqual(got, want) {
+			t.Errorf("appended hysteria2 user %d = %#v, want %#v", i, got, want)
+		}
+	}
+	if got := vlessUsers[0]["uuid"]; got != "45977ea3-f264-4671-bec9-5195fa960936" {
+		t.Errorf("legacy vless users changed: first uuid = %v", got)
+	}
+}
+
+// TestStaticMergeReconcileIdempotent covers the idempotency rule: unchanged
+// inputs — including a bare mtime touch of the base — keep the child and the
+// persisted hashes.
+func TestStaticMergeReconcileIdempotent(t *testing.T) {
+	tree := newMergeTree(t)
+	ag := testMergeAgent(t, tree)
+	ag.lastState.Users = mergeUsers()
+	first := ag.reconcileMerged(t.Context())
+	pid := requireChild(t, ag)
+
+	if err := os.Chtimes(tree.cfgPath, time.Now(), time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	second := ag.reconcileMerged(t.Context())
+
+	if got := childPid(ag); got != pid {
+		t.Errorf("child restarted on unchanged inputs: pid %d -> %d", pid, got)
+	}
+	requireHash(t, second, first)
+	requireAppliedHash(t, tree.workDir, first)
+	if got := ag.errorText(); got != "" {
+		t.Errorf("unexpected error state: %q", got)
+	}
+}
+
+// TestStaticMergeRevocation covers user removal: a user dropped from the
+// desired state disappears from the rendered config and the child restarts.
+func TestStaticMergeRevocation(t *testing.T) {
+	tree := newMergeTree(t)
+	ag := testMergeAgent(t, tree)
+	users := mergeUsers()
+	ag.lastState.Users = users
+	ag.reconcileMerged(t.Context())
+	pid := requireChild(t, ag)
+
+	ag.lastState.Users = users[:1]
+	hash := ag.reconcileMerged(t.Context())
+
+	if got := childPid(ag); got == pid || got == 0 {
+		t.Errorf("child not restarted after a revocation: pid %d -> %d", pid, got)
+	}
+	rendered := readFileString(t, filepath.Join(tree.workDir, renderedFileName))
+	for _, revoked := range []string{mergeDaveName, mergeDaveUUID, mergeDavePass} {
+		if strings.Contains(rendered, revoked) {
+			t.Errorf("revoked credential %q still present in the rendered config", revoked)
+		}
+	}
+	requireHash(t, hash, chainHashes(sha256Hex(mergeBaseConfig), sha256Hex(rendered)))
+	if got, want := len(inboundUsers(t, rendered, mergeVLESSTag)), mergeLegacyVLESSUsers+1; got != want {
+		t.Errorf("vless users = %d, want %d", got, want)
+	}
+	if got, want := len(inboundUsers(t, rendered, mergeHy2Tag)), mergeLegacyHy2Users+1; got != want {
+		t.Errorf("hysteria2 users = %d, want %d", got, want)
+	}
+}
+
+// TestStaticMergeDrainedState covers the drained node: with zero desired users
+// the rendered config is the base bytes again and the child restarts on it.
+func TestStaticMergeDrainedState(t *testing.T) {
+	tree := newMergeTree(t)
+	ag := testMergeAgent(t, tree)
+	ag.lastState.Users = mergeUsers()
+	ag.reconcileMerged(t.Context())
+	pid := requireChild(t, ag)
+
+	ag.lastState.Users = nil
+	hash := ag.reconcileMerged(t.Context())
+
+	if got := childPid(ag); got == pid || got == 0 {
+		t.Errorf("child not restarted on a drained state: pid %d -> %d", pid, got)
+	}
+	rendered := readFileString(t, filepath.Join(tree.workDir, renderedFileName))
+	if rendered != mergeBaseConfig {
+		t.Errorf("rendered config is not the base bytes:\n%s", rendered)
+	}
+	baseHash := sha256Hex(mergeBaseConfig)
+	requireHash(t, hash, chainHashes(baseHash, baseHash))
+}
+
+// TestStaticMergeNeverWritesConfigDir covers the read-only rule: the base's
+// directory and bytes survive a merge cycle, and the work dir ends up holding
+// exactly the four merge files.
+func TestStaticMergeNeverWritesConfigDir(t *testing.T) {
+	tree := newMergeTree(t)
+	if err := os.Chmod(tree.cfgDir, 0o555); err != nil {
+		t.Fatalf("chmod config dir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(tree.cfgDir, 0o755); err != nil {
+			t.Errorf("restore config dir mode: %v", err)
+		}
+	})
+	ag := testMergeAgent(t, tree)
+	cfgBefore := dirNames(t, tree.cfgDir)
+
+	ag.lastState.Users = mergeUsers()
+	hash := ag.reconcileMerged(t.Context())
+
+	requireChild(t, ag)
+	if hash == "" {
+		t.Error("reconcile returned an empty applied hash")
+	}
+	if got := ag.errorText(); got != "" {
+		t.Errorf("unexpected error state: %q", got)
+	}
+	if got := dirNames(t, tree.cfgDir); !slices.Equal(got, cfgBefore) {
+		t.Errorf("config dir entries changed: %v -> %v", cfgBefore, got)
+	}
+	if got := readFileString(t, tree.cfgPath); got != mergeBaseConfig {
+		t.Errorf("base config content changed: %q", got)
+	}
+	want := []string{hashFileName, renderedBaseHashFileName, renderedHashFileName, renderedFileName}
+	if got := dirNames(t, tree.workDir); !slices.Equal(got, want) {
+		t.Errorf("work dir entries = %v, want %v", got, want)
+	}
+}
+
+// TestStaticMergeFailedCheckKeepsChild covers the staged-check rule: a render
+// the fake sing-box rejects is discarded, the running child and the persisted
+// hashes stay, and the error state names the failed check.
+func TestStaticMergeFailedCheckKeepsChild(t *testing.T) {
+	tree := newMergeTree(t)
+	ag := testMergeAgent(t, tree)
+	ag.lastState.Users = mergeUsers()
+	applied := ag.reconcileMerged(t.Context())
+	pid := requireChild(t, ag)
+	renderedBefore := readFileString(t, filepath.Join(tree.workDir, renderedFileName))
+
+	// The marker sits in the log section, which validation ignores, so only
+	// the sing-box check can reject the new render.
+	broken := strings.Replace(mergeBaseConfig, `"level": "fatal"`, `"level": "fatal", `+invalidMarker, 1)
+	if broken == mergeBaseConfig {
+		t.Fatal("fixture base does not carry the log level the test replaces")
+	}
+	writeFile(t, tree.cfgPath, broken)
+
+	hash := ag.reconcileMerged(t.Context())
+
+	if got := childPid(ag); got != pid {
+		t.Errorf("child replaced after a failed check: pid %d -> %d", pid, got)
+	}
+	requireHash(t, hash, applied)
+	requireAppliedHash(t, tree.workDir, applied)
+	if got := readFileString(t, filepath.Join(tree.workDir, renderedFileName)); got != renderedBefore {
+		t.Error("stored render advanced past a failed check")
+	}
+	if got := ag.errorText(); !strings.Contains(got, "check") {
+		t.Errorf("error state = %q, want a sing-box check error", got)
+	}
+	if got := dirNames(t, tree.workDir); slices.Contains(got, renderedFileName+".new") {
+		t.Errorf("staged render left behind in the work dir: %v", got)
+	}
+}
+
+// mergeTree is one merge-mode temp layout: cfgDir holds the operator base,
+// workDir the agent state, dataDir the sing-box -D directory with the
+// certificate the base serves, logPath the fake sing-box invocation log.
+type mergeTree struct {
+	cfgDir  string
+	workDir string
+	dataDir string
+	cfgPath string
+	singbox string
+	logPath string
+	decls   []model.InboundDecl
+}
+
+// newMergeTree builds the layout, pins the declarations to the base and points
+// the fake sing-box at a log the tests read to see which config it runs.
+func newMergeTree(t *testing.T) mergeTree {
+	t.Helper()
+	root := t.TempDir()
+	tree := mergeTree{
+		cfgDir:  filepath.Join(root, "cfg"),
+		workDir: filepath.Join(root, "work"),
+		dataDir: filepath.Join(root, "data"),
+		singbox: fakeSingbox(t, root),
+		logPath: filepath.Join(root, "singbox.log"),
+	}
+	for _, dir := range []string{tree.cfgDir, tree.workDir, tree.dataDir} {
+		mkdirAll(t, dir)
+	}
+	tree.cfgPath = writeFile(t, filepath.Join(tree.cfgDir, configFileName), mergeBaseConfig)
+	tree.decls = mergeDecls(t, tree.dataDir)
+	t.Setenv("SINGBOX_LOG", tree.logPath)
+	return tree
+}
+
+// mergeDecls writes the certificate the base serves under dataDir and returns
+// the declarations pinned to the base's reality key and that certificate.
+func mergeDecls(t *testing.T, dataDir string) []model.InboundDecl {
+	t.Helper()
+	certPEM, keyPEM, err := generate.GenerateSelfSignedCertPEM(mergeSNI)
+	if err != nil {
+		t.Fatalf("generate certificate: %v", err)
+	}
+	certsDir := filepath.Join(dataDir, "certs")
+	mkdirAll(t, certsDir)
+	writeFile(t, filepath.Join(certsDir, mergeSNI+".crt"), string(certPEM))
+	writeFile(t, filepath.Join(certsDir, mergeSNI+".key"), string(keyPEM))
+
+	publicKey, err := generate.DerivePublicKey(mergeRealityPrivateKey)
+	if err != nil {
+		t.Fatalf("derive public key: %v", err)
+	}
+	pin, err := generate.ComputePinSHA256(certPEM)
+	if err != nil {
+		t.Fatalf("compute certificate pin: %v", err)
+	}
+	return []model.InboundDecl{
+		{
+			Tag: mergeVLESSTag, Type: model.InboundVLESSReality, SNI: mergeSNI, ListenPort: mergeListenPort,
+			RealityPublicKey: publicKey, RealityShortID: mergeShortID,
+		},
+		{
+			Tag: mergeHy2Tag, Type: model.InboundHysteria2, SNI: mergeSNI, ListenPort: mergeListenPort,
+			ObfsPassword: mergeObfsPassword, PinSHA256: pin,
+		},
+	}
+}
+
+// mergeUsers returns the control plane users the merge tests feed in.
+func mergeUsers() []model.User {
+	return []model.User{
+		{Name: mergeCarolName, VLESSUUID: mergeCarolUUID, Hy2Password: mergeCarolPass},
+		{Name: mergeDaveName, VLESSUUID: mergeDaveUUID, Hy2Password: mergeDavePass},
+	}
+}
+
+// testMergeAgent builds a merge-mode agent wired to the fake sing-box,
+// stopping the child when the test ends.
+func testMergeAgent(t *testing.T, tree mergeTree) *agent {
+	t.Helper()
+	ag := testAgent(t, tree.workDir, tree.singbox, tree.cfgPath, tree.dataDir)
+	ag.mergeTargets = true
+	ag.spec.Inbounds = tree.decls
+	return ag
+}
+
 // staticTree is one temp layout: cfgDir holds the operator config, workDir the
 // agent state, dataDir the sing-box -D directory.
 type staticTree struct {
@@ -454,6 +971,71 @@ func requireAppliedHash(t *testing.T, workDir, want string) {
 	if got := readFileString(t, filepath.Join(workDir, hashFileName)); got != want {
 		t.Errorf("applied hash = %q, want %q", got, want)
 	}
+}
+
+// requireLastRunConfig waits until the fake sing-box has logged a run of
+// configPath as its most recent invocation: the child writes the log line only
+// after it starts, so the first read may miss it.
+func requireLastRunConfig(t *testing.T, logPath string, configPath string) {
+	t.Helper()
+	deadline := time.Now().Add(mergeLogTimeout)
+	for {
+		configs := runConfigs(t, logPath)
+		if len(configs) > 0 && configs[len(configs)-1] == configPath {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("last run config = %v, want %q", configs, configPath)
+		}
+		time.Sleep(mergeLogPoll)
+	}
+}
+
+// runConfigs returns the config path of every sing-box run the fake binary was
+// asked to start, in order.
+func runConfigs(t *testing.T, logPath string) []string {
+	t.Helper()
+	data, err := os.ReadFile(logPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("read sing-box log %s: %v", logPath, err)
+	}
+	var configs []string
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		if !strings.HasPrefix(line, "run ") {
+			continue
+		}
+		_, configPath, ok := strings.Cut(line, " -c ")
+		if !ok {
+			t.Fatalf("sing-box log line %q carries no -c argument", line)
+		}
+		configs = append(configs, configPath)
+	}
+	return configs
+}
+
+// inboundUsers decodes a rendered config and returns the users array entries
+// of the inbound with the given tag.
+func inboundUsers(t *testing.T, raw string, tag string) []map[string]any {
+	t.Helper()
+	var tree struct {
+		Inbounds []struct {
+			Tag   string           `json:"tag"`
+			Users []map[string]any `json:"users"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal([]byte(raw), &tree); err != nil {
+		t.Fatalf("decode rendered config: %v", err)
+	}
+	for _, in := range tree.Inbounds {
+		if in.Tag == tag {
+			return in.Users
+		}
+	}
+	t.Fatalf("rendered config has no inbound %q", tag)
+	return nil
 }
 
 // dirNames returns a directory's entry names (os.ReadDir sorts them).

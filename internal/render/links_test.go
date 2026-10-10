@@ -75,6 +75,47 @@ func TestLinkGoldenURIs(t *testing.T) {
 	}
 }
 
+// TestLinkHysteria2PinnedPin covers the static-mode shape: the control plane
+// holds no certificate, so the pin comes from the stored pin_sha256 verbatim,
+// URL-escaped (the slash in "sha256/<b64>" becomes %2F as in the fixture).
+func TestLinkHysteria2PinnedPin(t *testing.T) {
+	const pin = "sha256/HdDtNOYbrezybvBZq9CjXjY6QAw8apos4mhNsGqCw9Q"
+	in := model.Inbound{
+		Tag: "hy2-pinned", Type: model.InboundHysteria2,
+		PublicEndpoint: "srv-1.example.com", PublicPort: wsPublicPort,
+		SNI: "cdn.example.com", ObfsPassword: "obfs-pass",
+		PinSHA256: pin,
+	}
+
+	got, err := Link("srv-1", in, model.User{Hy2Password: "hy2-pass"})
+	if err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+	want := "hysteria2://hy2-pass@srv-1.example.com:443?alpn=h3&obfs=salamander" +
+		"&obfs-password=obfs-pass&pinSHA256=sha256%2F" +
+		"HdDtNOYbrezybvBZq9CjXjY6QAw8apos4mhNsGqCw9Q&sni=cdn.example.com#srv-1-hy2-pinned"
+	if got != want {
+		t.Errorf("pinned hysteria2 URI:\n got %s\nwant %s", got, want)
+	}
+}
+
+// TestLinkHysteria2MissingPin covers the rejection rule: an inbound with
+// neither a certificate nor a pin_sha256 cannot yield a client pin.
+func TestLinkHysteria2MissingPin(t *testing.T) {
+	in := model.Inbound{
+		Tag: "hy2-bare", Type: model.InboundHysteria2,
+		PublicEndpoint: "srv-1.example.com", PublicPort: wsPublicPort,
+	}
+
+	_, err := Link("srv-1", in, model.User{Hy2Password: "hy2-pass"})
+	if err == nil {
+		t.Fatal("hysteria2 inbound without certificate or pin must error")
+	}
+	if !strings.Contains(err.Error(), "has neither a certificate nor a pin_sha256") {
+		t.Errorf("error must name both missing pin sources, got %v", err)
+	}
+}
+
 func TestLinkVLESSWSURI(t *testing.T) {
 	wsPath := "/up"
 	in := model.Inbound{
