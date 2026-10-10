@@ -13,6 +13,35 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-10-11
+
+### Added
+
+- User injection into the declared inbounds of a node running an
+  operator-owned base config (`KROT_STATIC_CONFIG`): a static node declares its
+  merge targets in the spec, pinning the credentials the base already serves -
+  `reality_public_key` and `reality_short_id` on a `vless_reality` inbound,
+  `obfs_password` and `pin_sha256` on a `hysteria2` one. The pins are stored
+  verbatim, never generated and never rotated by an `sni` change: a pinned
+  reality inbound keeps `reality_private_key` untouched and a pinned hysteria2
+  inbound keeps `cert_pem`/`key_pem` empty, since the base config holds the
+  private key and the certificate, and a partial pin set is rejected `400`
+  naming the missing field. The agent validates every merge target against the
+  base (tag and protocol, `listen_port`, `sni`, the reality public key derived
+  from the base's private key, short-id membership, the obfs password and the
+  certificate pin) and fails fast naming the tag and field on a mismatch, then
+  merges the active users append-only into the declared inbounds - the rest of
+  the base survives verbatim, credentials are deduplicated, the operator's own
+  users are never edited, revoked users simply stop being appended and a
+  drained node merges none - and runs the merged copy as
+  `<KROT_WORKDIR>/rendered.json` under the unchanged `-D` data dir, restarting
+  the child only when the rendered bytes change and booting offline from a
+  render whose base is unchanged. Static nodes that declare merge targets now
+  emit `/sub` links.
+- Hysteria2 subscription links fall back to the inbound's pinned `pin_sha256`
+  when it carries no stored certificate, so an injected static inbound yields a
+  `pinSHA256` parameter without the control plane holding the certificate.
+
 ## [0.2.0] - 2026-10-08
 
 ### Added

@@ -24,6 +24,7 @@ internal/store/          PostgreSQL store (users, servers, inbounds, server stat
 internal/store/migrations/  embedded golang-migrate migrations, applied at startup
 internal/model/          domain types shared by the control plane and the agents
 internal/render/         sing-box config renderer, share-link builders, Happ routing profile
+internal/staticmerge/    validate + splice the active users into an operator-owned base config
 internal/sub/            subscription token derivation and /sub/{token} endpoint
 internal/web/            templ + htmx portal (user page, read-only admin, routing page)
 internal/cpapi/          control-plane side of the agent API (bearer auth, desired state, heartbeat)
@@ -183,22 +184,22 @@ selected provider needs; the error lists every missing name at once.
 | `KROT_AGENT_TOKEN` | — | always | Bearer token for the agent API; must equal the control plane's value. |
 | `KROT_POLL_INTERVAL` | `30s` | no | Desired-state poll interval. |
 | `KROT_SPEC` | `/etc/krot/agent.yaml` | no | Declared node spec (server name, endpoint, inbounds). |
-| `KROT_WORKDIR` | `/etc/krot` | no | Work directory: rendered `config.json`, staged config, certs, applied hash, sing-box cache. |
-| `KROT_STATIC_CONFIG` | — | no | Path to an operator-owned sing-box config JSON; enables static config passthrough (see below). |
+| `KROT_WORKDIR` | `/etc/krot` | no | Work directory: rendered `config.json`, staged config, certs, applied hash, sing-box cache; in static mode also the injected `rendered.json` with `rendered.hash`/`rendered.base.hash`. Must be writable. |
+| `KROT_STATIC_CONFIG` | — | no | Path to an operator-owned sing-box config JSON; enables static config passthrough and user injection (see below). |
 | `KROT_STATIC_DATA_DIR` | dir of `KROT_STATIC_CONFIG` | no | sing-box data directory passed as `-D` in static mode; set it explicitly when certs/rule-sets live outside the config's directory (reference layout: config `/etc/sing-box/config.json`, data `/var/lib/sing-box`). |
 | `KROT_SINGBOX` | `/usr/local/bin/sing-box` | no | sing-box binary used for `check` and `run`. |
 | `KROT_HEALTH_ADDR` | `127.0.0.1:18081` | no | Health endpoint address (`/healthz`). |
 
-### Static config passthrough (`krot-agent`)
+### Static config passthrough and user injection (`krot-agent`)
 
 Some nodes serve credentials that are pinned by clients already deployed — not
 a config krot may re-render. Setting `KROT_STATIC_CONFIG` to such a config's
-path puts the agent into static mode: the file is the single source of truth
-for that node, and the agent supervises it unchanged. It never renders, merges,
-rewrites or parses the config, never writes into the config's directory, and
-hashes its bytes only. A static node declares no krot inbounds and emits no
-`/sub` links — that is expected; it still registers and heartbeats like any
-other node.
+path puts the agent into static mode: the operator-owned file is the single
+source of truth for that node, the agent never writes it or its directory and
+reads it as input only. The node declares the inbounds the control plane's
+users are injected into (its merge targets), and a static node does emit
+`/sub` links for the inbounds it declares. It still registers and heartbeats
+like any other node.
 
 - `KROT_STATIC_CONFIG` — path to the operator-owned sing-box config JSON;
   static mode is enabled exactly when the variable is set.
@@ -209,21 +210,61 @@ other node.
   under `/var/lib/sing-box`, so such a deployment sets
   `KROT_STATIC_DATA_DIR=/var/lib/sing-box` explicitly.
 
-In this mode the agent runs exactly `sing-box check` and `sing-box run` with
-`-D <data dir> -c <config>`. It re-validates and restarts the child only when
-the config file's content hash changes — an mtime-only touch does nothing —
-and a failed check keeps the currently running child and reports the error.
-Heartbeats carry the applied hash, the sha256 of the config file's bytes;
-`<KROT_WORKDIR>/applied.hash` is the only file written in this mode, so
-`KROT_WORKDIR` must be writable and must not be the config's directory.
+A merge target pins the credentials the base config already serves, so the
+control plane can hand out links without inventing or rotating anything:
+
+- a `vless_reality` target pins `reality_public_key` and `reality_short_id`:
+  the public key of the base's `tls.reality.private_key` and one id out of the
+  base's `tls.reality.short_id` list. The control plane stores both verbatim
+  and leaves `reality_private_key` untouched — empty for a fresh row — since
+  the base config holds the private key;
+- a `hysteria2` target pins `obfs_password` and `pin_sha256`: the base's obfs
+  password and the certificate pin in the `sha256/<base64url>` form the base
+  deployment's own links carry (sha256 over the certificate's public key, the
+  pin the control plane computes from a stored certificate too). The control
+  plane stores both verbatim and leaves `cert_pem`/`key_pem` empty, since the
+  base config holds the certificate; the inbound's subscription links carry
+  the pinned value as their `pinSHA256` parameter.
+
+The pins are never generated and never rotated — an `sni` change does not
+touch them — and the pins of a type are all-or-nothing: a partial set is
+rejected with `400` naming the missing field. Fields that do not apply to a
+declaration's type are inert.
+
+Before injecting anything the agent validates every merge target against the
+base config: the tag has to name an inbound of the base and the declared type
+has to match its protocol, `listen_port` and `sni` have to agree with it, the
+pinned reality public key has to be the one derived from the base's private
+key, the pinned short id has to be a member of the base's `short_id` list, the
+pinned obfs password has to equal the base's `obfs.password`, and the pinned
+certificate pin has to match the certificate the base's `tls.certificate_path`
+resolves to. Any mismatch fails fast, naming the tag and the field, before
+anything is written or restarted.
+
+The merge is append-only: the control plane's active users are appended to the
+declared inbounds' `users` arrays and nothing else in the base changes — the
+rest of the file survives verbatim, the operator's own users are never edited,
+credentials the base already carries are deduplicated, a revoked user simply
+stops being appended, and a node whose user set is drained merges none.
+
+In this mode the agent runs `sing-box check` and `sing-box run` with
+`-D <KROT_STATIC_DATA_DIR> -c <KROT_WORKDIR>/rendered.json`, where
+`rendered.json` is that merged copy of the base config. The base config and
+its directory are never written. The child is re-validated and restarted only
+when the rendered bytes change — an mtime-only touch of the base does nothing
+— and a failed check keeps the currently running child and reports the error.
+Heartbeats carry the applied hash, which now covers the base and the rendered
+config together; the agent writes `<KROT_WORKDIR>/rendered.hash` (the hash of
+the bytes the child runs) and `<KROT_WORKDIR>/rendered.base.hash` (the base
+hash of the last successful render) alongside `<KROT_WORKDIR>/applied.hash`,
+so `KROT_WORKDIR` must be writable and must not be the config's directory.
 
 Startup fails fast with a clear error on a missing or unreadable config file,
-an unreadable data directory, a failing `sing-box check`, or a `KROT_SPEC`
-that declares non-empty `inbounds` — static nodes are operator-managed and
-declare none, so `inbounds: []` is valid. Desired state keeps being polled,
-for registration and heartbeats, but never influences the config; before the
-first control-plane contact the agent starts the child from the config on
-disk, so a static node boots offline.
+an unreadable data directory, or a failing `sing-box check` of the config it
+starts from. Desired state keeps being polled for registration, heartbeats and
+the active-user set; before the first successful poll the agent starts the
+child from the last render whose base hash is unchanged, or from the base
+config as-is when there is none, so a static node boots offline.
 
 Pin the sing-box build the operator's config needs with `KROT_SINGBOX`; the
 live servers run `1.13.14-aa119e82` builds.
@@ -253,14 +294,27 @@ services:
       KROT_STATIC_DATA_DIR: "/var/lib/sing-box"
 ```
 
-The minimal `agent.yaml` next to it; the node still registers, with no
-inbounds declared:
+The `agent.yaml` next to it, declaring the two merge targets of the reference
+deployment; the pin values are placeholders for the credentials of that base
+config:
 
 ```yaml
 server: vpn1
 endpoint: vpn1.example.com
 route_profile: proxy-server
-inbounds: []
+inbounds:
+  - tag: vless-in
+    type: vless_reality
+    listen_port: 443
+    sni: vpn1.example.com
+    reality_public_key: "<public key of the base config's reality private key>"
+    reality_short_id: "<one short id of the base config's short_id list>"
+  - tag: hy2-in
+    type: hysteria2
+    listen_port: 443
+    sni: vpn1.example.com
+    obfs_password: "<obfs password of the base config>"
+    pin_sha256: "<certificate pin of the base config>"
 ```
 
 ## Subscriptions and the public Happ routing routes
