@@ -2,8 +2,8 @@ apiVersion: v2
 name: krot-control
 description: "Krot control plane: portal, subscriptions, agent API, identity sync"
 type: application
-version: 0.2.0-rc.3
-appVersion: "0.2.0-rc.3"
+version: 0.2.0
+appVersion: "0.2.0"
 home: https://github.com/Arsolitt/krot
 sources:
   - https://github.com/Arsolitt/krot

@@ -2,8 +2,8 @@ apiVersion: v2
 name: krot-agent
 description: "Krot proxy node agents: sing-box supervised by the control plane"
 type: application
-version: 0.2.0-rc.3
-appVersion: "0.2.0-rc.3"
+version: 0.2.0
+appVersion: "0.2.0"
 home: https://github.com/Arsolitt/krot
 sources:
   - https://github.com/Arsolitt/krot
