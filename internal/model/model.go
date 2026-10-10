@@ -39,16 +39,24 @@ func (t InboundType) Transport() string {
 }
 
 // InboundDecl is one inbound as declared by an agent: the helm values surface
-// rendered into agent.yaml and POSTed to the control plane verbatim.
+// rendered into agent.yaml and POSTed to the control plane verbatim. The pinned
+// credential fields, when set, are authoritative: the control plane stores them
+// verbatim instead of generating or rotating secrets, and the node's base
+// config owns the private material. Pinned fields of a type that does not use
+// them are inert.
 type InboundDecl struct {
-	Tag            string      `json:"tag"                       yaml:"tag"`
-	SNI            string      `json:"sni"                       yaml:"sni"`
-	Type           InboundType `json:"type"                      yaml:"type"`
-	PublicEndpoint string      `json:"public_endpoint,omitempty" yaml:"public_endpoint,omitempty"`
-	WSPath         string      `json:"ws_path,omitempty"         yaml:"ws_path,omitempty"`
-	ListenPort     int         `json:"listen_port"               yaml:"listen_port"`
-	PublicPort     int         `json:"public_port,omitempty"     yaml:"public_port,omitempty"`
-	OriginTLS      bool        `json:"origin_tls,omitempty"      yaml:"origin_tls,omitempty"`
+	Tag              string      `json:"tag"                          yaml:"tag"`
+	SNI              string      `json:"sni"                          yaml:"sni"`
+	Type             InboundType `json:"type"                         yaml:"type"`
+	PublicEndpoint   string      `json:"public_endpoint,omitempty"    yaml:"public_endpoint,omitempty"`
+	WSPath           string      `json:"ws_path,omitempty"            yaml:"ws_path,omitempty"`
+	RealityPublicKey string      `json:"reality_public_key,omitempty" yaml:"reality_public_key,omitempty"`
+	RealityShortID   string      `json:"reality_short_id,omitempty"   yaml:"reality_short_id,omitempty"`
+	ObfsPassword     string      `json:"obfs_password,omitempty"      yaml:"obfs_password,omitempty"`
+	PinSHA256        string      `json:"pin_sha256,omitempty"         yaml:"pin_sha256,omitempty"`
+	ListenPort       int         `json:"listen_port"                  yaml:"listen_port"`
+	PublicPort       int         `json:"public_port,omitempty"        yaml:"public_port,omitempty"`
+	OriginTLS        bool        `json:"origin_tls,omitempty"         yaml:"origin_tls,omitempty"`
 }
 
 // Spec is the agent's full declared node spec: the desired-state request body

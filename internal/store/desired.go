@@ -70,6 +70,9 @@ func validateInbound(
 	if decl.Type == model.InboundVLESSWS && (decl.WSPath == "" || decl.WSPath[0] != '/') {
 		return fmt.Errorf("%w: vless_ws inbound %q needs ws_path starting with '/'", ErrInvalidSpec, decl.Tag)
 	}
+	if err := validatePinnedPair(decl); err != nil {
+		return err
+	}
 
 	ports, ok := seenBinds[decl.Type]
 	if !ok {
@@ -83,6 +86,39 @@ func validateInbound(
 	}
 	ports[decl.ListenPort] = struct{}{}
 	return nil
+}
+
+// validatePinnedPair rejects a half-pinned declaration: the credential columns
+// a type pins must be pinned together or not at all, because a lone pin would
+// silently mix a declared value with a generated one. Pinned fields of a type
+// that does not use them are inert and pass through unchecked.
+func validatePinnedPair(decl model.InboundDecl) error {
+	switch decl.Type {
+	case model.InboundVLESSReality:
+		return pinPairError(decl,
+			"reality_public_key", decl.RealityPublicKey, "reality_short_id", decl.RealityShortID)
+	case model.InboundHysteria2:
+		return pinPairError(decl, "obfs_password", decl.ObfsPassword, "pin_sha256", decl.PinSHA256)
+	case model.InboundVLESSWS:
+		// A ws inbound terminates with the certificate the control plane
+		// manages, or with none at all: it pins no credentials.
+		return nil
+	default:
+		// Unknown types are rejected before this runs; nothing to pin.
+		return nil
+	}
+}
+
+// pinPairError rejects a credential pair with exactly one half pinned, naming
+// the pinned field and the missing companion.
+func pinPairError(decl model.InboundDecl, field, value, companion, companionValue string) error {
+	if (value == "") == (companionValue == "") {
+		return nil
+	}
+	if value == "" {
+		field, companion = companion, field
+	}
+	return fmt.Errorf("%w: inbound %q pins %s but not %s", ErrInvalidSpec, decl.Tag, field, companion)
 }
 
 // declaredInbound is a declaration with defaults applied, ready for storage.
@@ -121,8 +157,14 @@ type secrets struct {
 	pinSHA256         string
 }
 
-// freshSecrets generates a full secret set for a newly declared inbound.
+// freshSecrets generates a full secret set for a newly declared inbound. A
+// fully pinned declaration stores the declared values verbatim and generates
+// nothing: the node's base config owns the private material.
 func freshSecrets(decl model.InboundDecl) (secrets, error) {
+	if sec, pinned := pinnedSecrets(decl); pinned {
+		return sec, nil
+	}
+
 	var sec secrets
 	var err error
 
@@ -152,6 +194,34 @@ func freshSecrets(decl model.InboundDecl) (secrets, error) {
 	return sec, nil
 }
 
+// pinnedSecrets returns the declared credentials of a fully pinned declaration
+// and reports whether the declaration pins a pair. A pinned hysteria2 keeps
+// cert_pem and key_pem empty because its base config holds the certificate.
+func pinnedSecrets(decl model.InboundDecl) (secrets, bool) {
+	switch {
+	case pinnedReality(decl):
+		return secrets{realityPublicKey: decl.RealityPublicKey, realityShortID: decl.RealityShortID}, true
+	case pinnedHysteria2(decl):
+		return secrets{obfsPassword: decl.ObfsPassword, pinSHA256: decl.PinSHA256}, true
+	default:
+		return secrets{}, false
+	}
+}
+
+// pinnedReality reports whether decl pins the full vless_reality credential
+// pair; half-pinned declarations never reach storage.
+func pinnedReality(decl model.InboundDecl) bool {
+	return decl.Type == model.InboundVLESSReality &&
+		decl.RealityPublicKey != "" && decl.RealityShortID != ""
+}
+
+// pinnedHysteria2 reports whether decl pins the full hysteria2 credential
+// pair; half-pinned declarations never reach storage.
+func pinnedHysteria2(decl model.InboundDecl) bool {
+	return decl.Type == model.InboundHysteria2 &&
+		decl.ObfsPassword != "" && decl.PinSHA256 != ""
+}
+
 // withFreshCert generates a self-signed certificate for sni and pins it.
 func withFreshCert(sec secrets, sni string) (secrets, error) {
 	certPEM, keyPEM, err := generate.GenerateSelfSignedCertPEM(sni)
@@ -173,7 +243,10 @@ func needsCert(decl model.InboundDecl) bool {
 }
 
 // mergeSecrets derives the stored secrets for an updated declaration,
-// preserving stable credentials across non-secret changes.
+// preserving stable credentials across non-secret changes. A pinned
+// declaration overrides the named columns with the declared values and never
+// regenerates: a pinned hysteria2 keeps its base-config certificate columns
+// empty across SNI changes.
 func mergeSecrets(decl model.InboundDecl, existing model.Inbound) (secrets, error) {
 	sec := secrets{
 		realityPrivateKey: existing.RealityPrivateKey,
@@ -186,6 +259,18 @@ func mergeSecrets(decl model.InboundDecl, existing model.Inbound) (secrets, erro
 	}
 
 	switch {
+	case pinnedReality(decl):
+		// The declaration owns the public half; the stored private key is
+		// never touched (empty for a base-config-managed row).
+		sec.realityPublicKey, sec.realityShortID = decl.RealityPublicKey, decl.RealityShortID
+	case pinnedHysteria2(decl):
+		// The base config holds the certificate; store only the declared
+		// obfs password and pin and generate nothing.
+		sec.obfsPassword, sec.pinSHA256 = decl.ObfsPassword, decl.PinSHA256
+		sec.certPEM, sec.keyPEM = "", ""
+	case certOwnedByBase(existing):
+		// The stored row was written by a pinned declaration: a later
+		// declaration without pins must not replace what the base config owns.
 	case needsCert(decl) && (existing.SNI != decl.SNI || existing.CertPEM == ""):
 		// A SNI change invalidates the certificate; reality keys and the
 		// obfs password deliberately survive it.
@@ -195,6 +280,13 @@ func mergeSecrets(decl model.InboundDecl, existing model.Inbound) (secrets, erro
 		sec.certPEM, sec.keyPEM, sec.pinSHA256 = "", "", ""
 	}
 	return sec, nil
+}
+
+// certOwnedByBase reports whether the stored row's certificate columns belong
+// to the node's base config: a hysteria2 row without a certificate was written
+// by a pinned declaration, so the control plane never generates one for it.
+func certOwnedByBase(existing model.Inbound) bool {
+	return existing.Type == model.InboundHysteria2 && existing.CertPEM == ""
 }
 
 // DesiredState reconciles the agent's declaration into the database (single

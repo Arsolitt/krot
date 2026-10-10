@@ -76,6 +76,15 @@ func mustTestURL(t *testing.T) string {
 	return url
 }
 
+// inboundsByTag indexes a desired-state inbound list by tag.
+func inboundsByTag(state model.DesiredState) map[string]model.Inbound {
+	byTag := make(map[string]model.Inbound, len(state.Inbounds))
+	for _, in := range state.Inbounds {
+		byTag[in.Tag] = in
+	}
+	return byTag
+}
+
 func TestDesiredStateCreatesSecrets(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
@@ -233,10 +242,181 @@ func TestDesiredStateSNIRotatesCertOnly(t *testing.T) {
 	}
 }
 
+// TestDesiredStatePinnedSecrets checks that a pinned declaration stores the
+// declared credentials verbatim and generates nothing: its base config owns
+// the private material.
+func TestDesiredStatePinnedSecrets(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	spec := testSpec()
+	spec.Inbounds[0].RealityPublicKey = "pbk-declared"
+	spec.Inbounds[0].RealityShortID = "sid-declared"
+	spec.Inbounds[1].ObfsPassword = "obfs-declared"
+	spec.Inbounds[1].PinSHA256 = "sha256/declared"
+
+	state, err := st.DesiredState(ctx, spec)
+	if err != nil {
+		t.Fatalf("DesiredState: %v", err)
+	}
+	byTag := inboundsByTag(state)
+
+	reality := byTag["vless-in"]
+	if reality.RealityPublicKey != "pbk-declared" || reality.RealityShortID != "sid-declared" {
+		t.Errorf("reality pins not stored verbatim: %+v", reality)
+	}
+	if reality.RealityPrivateKey != "" {
+		t.Errorf("pinned reality must not generate a private key: %q", reality.RealityPrivateKey)
+	}
+
+	hy2 := byTag["hy2-in"]
+	if hy2.ObfsPassword != "obfs-declared" || hy2.PinSHA256 != "sha256/declared" {
+		t.Errorf("hy2 pins not stored verbatim: %+v", hy2)
+	}
+	if hy2.CertPEM != "" || hy2.KeyPEM != "" {
+		t.Errorf("pinned hy2 must keep the certificate columns empty: %+v", hy2)
+	}
+}
+
+// TestDesiredStatePinOverridesGenerated checks that adding pins to an existing
+// generated declaration takes over the named columns: the hysteria2
+// certificate is cleared and the reality private key is preserved.
+func TestDesiredStatePinOverridesGenerated(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	first, err := st.DesiredState(ctx, testSpec())
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	firstByTag := inboundsByTag(first)
+	if firstByTag["hy2-in"].CertPEM == "" || firstByTag["vless-in"].RealityPrivateKey == "" {
+		t.Fatalf("unpinned declaration must generate secrets: %+v", first)
+	}
+
+	spec := testSpec()
+	spec.Inbounds[0].RealityPublicKey = "pbk-takeover"
+	spec.Inbounds[0].RealityShortID = "sid-takeover"
+	spec.Inbounds[1].ObfsPassword = "obfs-takeover"
+	spec.Inbounds[1].PinSHA256 = "sha256/takeover"
+	second, err := st.DesiredState(ctx, spec)
+	if err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	byTag := inboundsByTag(second)
+
+	reality := byTag["vless-in"]
+	if reality.RealityPublicKey != "pbk-takeover" || reality.RealityShortID != "sid-takeover" {
+		t.Errorf("pins must override generated reality values: %+v", reality)
+	}
+	if reality.RealityPrivateKey != firstByTag["vless-in"].RealityPrivateKey {
+		t.Error("a pinned reality must keep the stored private key")
+	}
+
+	hy2 := byTag["hy2-in"]
+	if hy2.ObfsPassword != "obfs-takeover" || hy2.PinSHA256 != "sha256/takeover" {
+		t.Errorf("pins must override generated hy2 values: %+v", hy2)
+	}
+	if hy2.CertPEM != "" || hy2.KeyPEM != "" {
+		t.Errorf("a pinned hy2 must clear the generated certificate: %+v", hy2)
+	}
+}
+
+// TestDesiredStatePinnedNoRotation checks that pinned declarations are never
+// rotated: an SNI change regenerates nothing, and dropping the pins from a
+// later declaration keeps the stored values.
+func TestDesiredStatePinnedNoRotation(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	spec := testSpec()
+	spec.Inbounds[0].RealityPublicKey = "pbk-1"
+	spec.Inbounds[0].RealityShortID = "sid-1"
+	spec.Inbounds[1].ObfsPassword = "obfs-1"
+	spec.Inbounds[1].PinSHA256 = "sha256/1"
+	if _, err := st.DesiredState(ctx, spec); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+
+	// A SNI change moves public_endpoint but regenerates no credential.
+	spec.Inbounds[0].SNI = "new-cdn.example.com"
+	spec.Inbounds[1].SNI = "new-cdn.example.com"
+	spec.Endpoint = "vpn2.example.com"
+	second, err := st.DesiredState(ctx, spec)
+	if err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	byTag := inboundsByTag(second)
+
+	hy2 := byTag["hy2-in"]
+	if hy2.ObfsPassword != "obfs-1" || hy2.PinSHA256 != "sha256/1" || hy2.CertPEM != "" || hy2.KeyPEM != "" {
+		t.Errorf("SNI change must not touch a pinned hy2: %+v", hy2)
+	}
+	if hy2.PublicEndpoint != "vpn2.example.com" {
+		t.Errorf("public_endpoint must follow the endpoint: %q", hy2.PublicEndpoint)
+	}
+	reality := byTag["vless-in"]
+	if reality.RealityPublicKey != "pbk-1" || reality.RealityShortID != "sid-1" || reality.RealityPrivateKey != "" {
+		t.Errorf("SNI change must not touch a pinned reality: %+v", reality)
+	}
+
+	// Dropping the pins keeps the stored values and the desired state hash:
+	// an unpinned refresh must not replace what the base config owns.
+	spec.Inbounds[0].RealityPublicKey, spec.Inbounds[0].RealityShortID = "", ""
+	spec.Inbounds[1].ObfsPassword, spec.Inbounds[1].PinSHA256 = "", ""
+	third, err := st.DesiredState(ctx, spec)
+	if err != nil {
+		t.Fatalf("third: %v", err)
+	}
+	byTag = inboundsByTag(third)
+
+	hy2 = byTag["hy2-in"]
+	if hy2.ObfsPassword != "obfs-1" || hy2.PinSHA256 != "sha256/1" || hy2.CertPEM != "" || hy2.KeyPEM != "" {
+		t.Errorf("dropping pins must not rotate a pinned hy2: %+v", hy2)
+	}
+	reality = byTag["vless-in"]
+	if reality.RealityPublicKey != "pbk-1" || reality.RealityShortID != "sid-1" || reality.RealityPrivateKey != "" {
+		t.Errorf("dropping pins must not rotate a pinned reality: %+v", reality)
+	}
+	if third.Hash != second.Hash {
+		t.Errorf("dropping pins must not change the desired state: %s -> %s", second.Hash, third.Hash)
+	}
+}
+
+// TestDesiredStateInertPins checks that pinned fields on a type that does not
+// use them are accepted and ignored.
+func TestDesiredStateInertPins(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	spec := testSpec()
+	spec.Inbounds = append(spec.Inbounds, model.InboundDecl{
+		Tag:              "ws-in",
+		Type:             model.InboundVLESSWS,
+		ListenPort:       2053,
+		SNI:              "front.example.org",
+		WSPath:           "/up",
+		RealityPublicKey: "pbk",
+		RealityShortID:   "sid",
+		ObfsPassword:     "obfs",
+		PinSHA256:        "sha256/abc",
+	})
+	state, err := st.DesiredState(ctx, spec)
+	if err != nil {
+		t.Fatalf("DesiredState: %v", err)
+	}
+	ws := inboundsByTag(state)["ws-in"]
+	if ws.RealityPublicKey != "" || ws.RealityShortID != "" || ws.RealityPrivateKey != "" ||
+		ws.ObfsPassword != "" || ws.PinSHA256 != "" || ws.CertPEM != "" {
+		t.Errorf("pins of an unrelated type must not be stored: %+v", ws)
+	}
+}
+
 func TestDesiredStateValidation(t *testing.T) {
 	tests := []struct {
-		mut  func(*model.Spec)
-		name string
+		mut     func(*model.Spec)
+		name    string
+		wantMsg string
 	}{
 		{name: "empty server", mut: func(s *model.Spec) { s.Server = "" }},
 		{name: "empty endpoint", mut: func(s *model.Spec) { s.Endpoint = "" }},
@@ -265,6 +445,18 @@ func TestDesiredStateValidation(t *testing.T) {
 				SNI:        "f.example.org",
 			}
 		}},
+		{name: "reality pin without short id", mut: func(s *model.Spec) {
+			s.Inbounds[0].RealityPublicKey = "pbk"
+		}, wantMsg: `inbound "vless-in" pins reality_public_key but not reality_short_id`},
+		{name: "reality short id without pin", mut: func(s *model.Spec) {
+			s.Inbounds[0].RealityShortID = "sid"
+		}, wantMsg: `inbound "vless-in" pins reality_short_id but not reality_public_key`},
+		{name: "hy2 obfs without pin", mut: func(s *model.Spec) {
+			s.Inbounds[1].ObfsPassword = "obfs"
+		}, wantMsg: `inbound "hy2-in" pins obfs_password but not pin_sha256`},
+		{name: "hy2 pin without obfs", mut: func(s *model.Spec) {
+			s.Inbounds[1].PinSHA256 = "sha256/abc"
+		}, wantMsg: `inbound "hy2-in" pins pin_sha256 but not obfs_password`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -274,6 +466,9 @@ func TestDesiredStateValidation(t *testing.T) {
 			_, err := st.DesiredState(context.Background(), spec)
 			if !errors.Is(err, ErrInvalidSpec) {
 				t.Fatalf("expected ErrInvalidSpec, got %v", err)
+			}
+			if tt.wantMsg != "" && !strings.Contains(err.Error(), tt.wantMsg) {
+				t.Errorf("error = %q, want it to contain %q", err, tt.wantMsg)
 			}
 		})
 	}
