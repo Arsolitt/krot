@@ -7,15 +7,18 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/Arsolitt/krot/internal/model"
 )
 
-// sing-box protocol and transport names the declared inbound types map to.
+// sing-box protocol and transport names the declared inbound types map to,
+// and the prefix of the HPKP-style pin a pinSHA256 parameter cannot carry.
 const (
 	protocolVLESS     = "vless"
 	protocolHysteria2 = "hysteria2"
 	transportWS       = "ws"
+	hpkpPinPrefix     = "sha256/"
 )
 
 // validateAll checks every declaration against the parsed base, in order.
@@ -210,10 +213,20 @@ func checkHysteria2(raw []byte, in *baseInbound, decl *model.InboundDecl, dataDi
 	return checkPin(raw, in, decl, dataDir)
 }
 
-// checkPin requires the declared pin to equal the pin of the certificate the
-// base inbound serves: certificate_path is used verbatim when absolute and
-// resolved against the data directory when relative.
+// checkPin requires the declared pin to be the Xray-core pin of the
+// certificate the base serves: lowercase hex sha256 over the leaf certificate
+// DER, the form a pinSHA256 client parameter hex-decodes. The HPKP-style
+// "sha256/<base64>" pin of the base config's own sing-box settings cannot ride
+// in that parameter, so it is rejected with its own message rather than
+// sailing through as a mismatch. certificate_path is used verbatim when
+// absolute and resolved against the data directory when relative.
 func checkPin(raw []byte, in *baseInbound, decl *model.InboundDecl, dataDir string) error {
+	if strings.HasPrefix(decl.PinSHA256, hpkpPinPrefix) {
+		return errField(decl.Tag, "pin_sha256",
+			"is an HPKP-style pin (%q), which a pinSHA256 client parameter cannot carry: "+
+				"it hex-decodes the value, so declare the lowercase hex sha256 of the certificate DER",
+			decl.PinSHA256)
+	}
 	path, ok := in.text(raw, keyTLS, keyCertificatePath)
 	if !ok || path == "" {
 		return errField(decl.Tag, "tls.certificate_path", "base inbound has no non-empty %q string", keyCertificatePath)
@@ -225,11 +238,11 @@ func checkPin(raw []byte, in *baseInbound, decl *model.InboundDecl, dataDir stri
 	if err != nil {
 		return fmt.Errorf("inbound %q: tls.certificate_path: read certificate %s: %w", decl.Tag, path, err)
 	}
-	pin, err := computePinSHA256(certPEM)
+	pin, err := xrayCertPin(certPEM)
 	if err != nil {
 		return fmt.Errorf("inbound %q: pin_sha256: compute certificate pin: %w", decl.Tag, err)
 	}
-	if decl.PinSHA256 != pin {
+	if !strings.EqualFold(decl.PinSHA256, pin) {
 		return errField(decl.Tag, "pin_sha256", "does not match the base certificate pin")
 	}
 	return nil

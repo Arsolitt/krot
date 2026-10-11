@@ -29,7 +29,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   naming the missing field. The agent validates every merge target against the
   base (tag and protocol, `listen_port`, `sni`, the reality public key derived
   from the base's private key, short-id membership, the obfs password and the
-  certificate pin) and fails fast naming the tag and field on a mismatch, then
+  certificate pin - the last in the Xray form a `pinSHA256` parameter carries,
+  hex of the sha256 over the leaf certificate DER, with the HPKP-style
+  `sha256/<base64>` spelling that sing-box pins elsewhere rejected naming the
+  field) and fails fast naming the tag and field on a mismatch, then
   merges the active users append-only into the declared inbounds - the rest of
   the base survives verbatim, credentials are deduplicated, the operator's own
   users are never edited, revoked users simply stop being appended and a
@@ -40,7 +43,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   emit `/sub` links.
 - Hysteria2 subscription links fall back to the inbound's pinned `pin_sha256`
   when it carries no stored certificate, so an injected static inbound yields a
-  `pinSHA256` parameter without the control plane holding the certificate.
+  `pinSHA256` parameter without the control plane holding the certificate. The
+  pinned value is the Xray pin, so the parameter is parseable by the clients
+  that hex-decode it.
 
 ## [0.2.0] - 2026-10-08
 

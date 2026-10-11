@@ -435,7 +435,7 @@ func testDecls(t *testing.T) []model.InboundDecl {
 // with the given obfs password.
 func hy2Decl(t *testing.T, obfsPassword string) model.InboundDecl {
 	t.Helper()
-	pin, err := generate.ComputePinSHA256(readCert(t))
+	pin, err := xrayCertPin(readCert(t))
 	if err != nil {
 		t.Fatalf("compute pin: %v", err)
 	}

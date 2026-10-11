@@ -219,12 +219,16 @@ control plane can hand out links without inventing or rotating anything:
   and leaves `reality_private_key` untouched — empty for a fresh row — since
   the base config holds the private key;
 - a `hysteria2` target pins `obfs_password` and `pin_sha256`: the base's obfs
-  password and the certificate pin in the `sha256/<base64url>` form the base
-  deployment's own links carry (sha256 over the certificate's public key, the
-  pin the control plane computes from a stored certificate too). The control
-  plane stores both verbatim and leaves `cert_pem`/`key_pem` empty, since the
-  base config holds the certificate; the inbound's subscription links carry
-  the pinned value as their `pinSHA256` parameter.
+  password and the certificate's Xray pin — hex of the sha256 over the leaf
+  certificate DER, any case, the value a client hex-decodes out of the link's
+  `pinSHA256` parameter. The control plane stores both verbatim and leaves
+  `cert_pem`/`key_pem` empty, since the base config holds the certificate; the
+  inbound's subscription links carry the pinned value as their `pinSHA256`
+  parameter. The HPKP-style `sha256/<base64>` pin a sing-box
+  `certificate_public_key_sha256` setting uses is **not** that value and is
+  rejected with an error naming the field, rather than emitting a link no
+  client can parse. (Managed hysteria2 inbounds keep their historical
+  `pin_sha256` column value; only injected links read it.)
 
 The pins are never generated and never rotated — an `sni` change does not
 touch them — and the pins of a type are all-or-nothing: a partial set is
@@ -237,9 +241,9 @@ has to match its protocol, `listen_port` and `sni` have to agree with it, the
 pinned reality public key has to be the one derived from the base's private
 key, the pinned short id has to be a member of the base's `short_id` list, the
 pinned obfs password has to equal the base's `obfs.password`, and the pinned
-certificate pin has to match the certificate the base's `tls.certificate_path`
-resolves to. Any mismatch fails fast, naming the tag and the field, before
-anything is written or restarted.
+certificate pin has to be the Xray pin of the certificate the base's
+`tls.certificate_path` resolves to. Any mismatch fails fast, naming the tag and
+the field, before anything is written or restarted.
 
 The merge is append-only: the control plane's active users are appended to the
 declared inbounds' `users` arrays and nothing else in the base changes — the

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"log/slog"
 	"os"
@@ -560,6 +561,25 @@ func TestStaticMergeBootstrap(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("fails fast on an HPKP-form pin", func(t *testing.T) {
+		tree := newMergeTree(t)
+		tree.decls[1].PinSHA256 = "sha256/KSEcEDC5g7xuZ0m9wPy15oO2r1TlnGDvgAYRnMfY7SQ"
+		ag := testMergeAgent(t, tree)
+
+		err := ag.bootstrap(t.Context())
+		if err == nil {
+			t.Fatal("expected bootstrap to reject an HPKP-style pin a client cannot decode")
+		}
+		if ag.childRunning() {
+			t.Error("child must not start with a pin the links cannot carry")
+		}
+		for _, want := range []string{mergeHy2Tag, "pin_sha256", "HPKP"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not mention %q", err, want)
+			}
+		}
+	})
 }
 
 // TestStaticMergeReconcile covers the merge reconcile: the desired users are
@@ -827,10 +847,7 @@ func mergeDecls(t *testing.T, dataDir string) []model.InboundDecl {
 	if err != nil {
 		t.Fatalf("derive public key: %v", err)
 	}
-	pin, err := generate.ComputePinSHA256(certPEM)
-	if err != nil {
-		t.Fatalf("compute certificate pin: %v", err)
-	}
+	pin := xrayPin(t, certPEM)
 	return []model.InboundDecl{
 		{
 			Tag: mergeVLESSTag, Type: model.InboundVLESSReality, SNI: mergeSNI, ListenPort: mergeListenPort,
@@ -1082,5 +1099,19 @@ func readFileString(t *testing.T, path string) string {
 // sha256Hex returns the hex sha256 of s, mirroring the agent's file hashing.
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// xrayPin returns the pin a hysteria2 declaration must carry for a
+// certificate: hex of the sha256 over the leaf certificate DER, the form the
+// clients hex-decode out of a link's pinSHA256 parameter. This mirrors what
+// the agent validates, computed independently of the implementation.
+func xrayPin(t *testing.T, certPEM []byte) string {
+	t.Helper()
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		t.Fatal("certificate PEM does not decode")
+	}
+	sum := sha256.Sum256(block.Bytes)
 	return hex.EncodeToString(sum[:])
 }

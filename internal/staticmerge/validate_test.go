@@ -67,7 +67,9 @@ func TestValidateTable(t *testing.T) {
 	noPin := valid[1]
 	noPin.PinSHA256 = ""
 	wrongPin := valid[1]
-	wrongPin.PinSHA256 = "sha256/wrong-pin"
+	wrongPin.PinSHA256 = strings.Repeat("ab", 32)
+	hpkpPin := valid[1]
+	hpkpPin.PinSHA256 = "sha256/0Ov4PXeAi3g0H7mTg7g4p8m5W0lJ7V9wD2hH3sQ1kZ0"
 
 	cases := []struct {
 		isErr  error
@@ -149,6 +151,11 @@ func TestValidateTable(t *testing.T) {
 			name:   "incorrect pin",
 			decls:  []model.InboundDecl{wrongPin},
 			fields: []string{"pin_sha256"},
+		},
+		{
+			name:   "HPKP-form pin",
+			decls:  []model.InboundDecl{hpkpPin},
+			fields: []string{"pin_sha256", "HPKP"},
 		},
 		{
 			name:   "missing certificate_path",
@@ -283,6 +290,17 @@ func TestValidateAcceptsKeySpellings(t *testing.T) {
 	}
 }
 
+// TestValidateAcceptsUppercasePin covers the rule that the declared pin is
+// compared as hex, not as text: the same pin in upper case authenticates the
+// same certificate and must pass.
+func TestValidateAcceptsUppercasePin(t *testing.T) {
+	decls := testDecls(t)
+	decls[1].PinSHA256 = strings.ToUpper(decls[1].PinSHA256)
+	if err := Validate(Options{Base: fixtureBase(t), DataDir: dataDir, Decls: decls}); err != nil {
+		t.Fatalf("Validate rejected an upper-case hex pin: %v", err)
+	}
+}
+
 // TestValidateAbsoluteCertificatePath covers the rule that an absolute
 // certificate_path is used verbatim and never resolved against the data
 // directory.
@@ -291,7 +309,7 @@ func TestValidateAbsoluteCertificatePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve certificate path: %v", err)
 	}
-	pin, err := generate.ComputePinSHA256(readCert(t))
+	pin, err := xrayCertPin(readCert(t))
 	if err != nil {
 		t.Fatalf("compute pin: %v", err)
 	}

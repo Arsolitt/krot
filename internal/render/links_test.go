@@ -76,10 +76,12 @@ func TestLinkGoldenURIs(t *testing.T) {
 }
 
 // TestLinkHysteria2PinnedPin covers the static-mode shape: the control plane
-// holds no certificate, so the pin comes from the stored pin_sha256 verbatim,
-// URL-escaped (the slash in "sha256/<b64>" becomes %2F as in the fixture).
+// holds no certificate, so the pin comes from the stored pin_sha256 verbatim.
+// That value is the Xray form (hex of sha256 over the leaf certificate DER) -
+// a pinSHA256 parameter is hex-decoded, so the HPKP-style "sha256/<base64>"
+// pin of the base config's own links cannot ride here.
 func TestLinkHysteria2PinnedPin(t *testing.T) {
-	const pin = "sha256/HdDtNOYbrezybvBZq9CjXjY6QAw8apos4mhNsGqCw9Q"
+	const pin = "1d3b4d5f6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f"
 	in := model.Inbound{
 		Tag: "hy2-pinned", Type: model.InboundHysteria2,
 		PublicEndpoint: "srv-1.example.com", PublicPort: wsPublicPort,
@@ -92,8 +94,8 @@ func TestLinkHysteria2PinnedPin(t *testing.T) {
 		t.Fatalf("Link: %v", err)
 	}
 	want := "hysteria2://hy2-pass@srv-1.example.com:443?alpn=h3&obfs=salamander" +
-		"&obfs-password=obfs-pass&pinSHA256=sha256%2F" +
-		"HdDtNOYbrezybvBZq9CjXjY6QAw8apos4mhNsGqCw9Q&sni=cdn.example.com#srv-1-hy2-pinned"
+		"&obfs-password=obfs-pass&pinSHA256=" + pin +
+		"&sni=cdn.example.com#srv-1-hy2-pinned"
 	if got != want {
 		t.Errorf("pinned hysteria2 URI:\n got %s\nwant %s", got, want)
 	}

@@ -2,10 +2,15 @@ package staticmerge
 
 import (
 	"encoding/base64"
+	"encoding/hex"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/Arsolitt/cheburbox/generate"
+
+	"github.com/Arsolitt/krot/internal/model"
+	"github.com/Arsolitt/krot/internal/render"
 )
 
 // TestDerivePublicKeyMatchesGenerate pins the local x25519 derivation to the
@@ -44,31 +49,45 @@ func TestDerivePublicKeyMatchesGenerate(t *testing.T) {
 	}
 }
 
-// TestComputePinSHA256MatchesGenerate pins the local certificate pin to the
-// control plane's generate.ComputePinSHA256, so the pin an operator declares
-// is the one the control plane stores for the same certificate.
-func TestComputePinSHA256MatchesGenerate(t *testing.T) {
+// TestXrayCertPinMatchesLinks pins the pin the agent validates to the one the
+// control plane puts in a hysteria2 link: validation and the link builder must
+// agree byte for byte on the same certificate, and the value must be the hex
+// form a pinSHA256 parameter carries rather than the HPKP form, which clients
+// fail to hex-decode.
+func TestXrayCertPinMatchesLinks(t *testing.T) {
 	certPEM, _, err := generate.GenerateSelfSignedCertPEM("ams.example.com")
 	if err != nil {
 		t.Fatalf("generate certificate: %v", err)
 	}
 
-	got, err := computePinSHA256(certPEM)
+	got, err := xrayCertPin(certPEM)
 	if err != nil {
-		t.Fatalf("computePinSHA256: %v", err)
+		t.Fatalf("xrayCertPin: %v", err)
 	}
-	want, err := generate.ComputePinSHA256(certPEM)
-	if err != nil {
-		t.Fatalf("generate.ComputePinSHA256: %v", err)
+	if _, err := hex.DecodeString(got); err != nil {
+		t.Fatalf("pin %q is not hex: %v", got, err)
 	}
-	if got != want {
-		t.Errorf("computePinSHA256 = %q, want %q", got, want)
-	}
-	if !strings.HasPrefix(got, pinPrefix) {
-		t.Errorf("pin %q lacks the %q prefix", got, pinPrefix)
+	if strings.HasPrefix(got, hpkpPinPrefix) {
+		t.Errorf("pin %q must not carry the HPKP prefix", got)
 	}
 
-	if _, err := computePinSHA256([]byte("not a certificate")); err == nil {
+	uri, err := render.Link("ams-p-1", model.Inbound{
+		Tag: "hy2-in", Type: model.InboundHysteria2, SNI: "ams.example.com",
+		ListenPort: 443, PublicEndpoint: "ams.example.com", PublicPort: 443,
+		ObfsPassword: "obfs-password", CertPEM: string(certPEM),
+	}, model.User{Name: "u", Hy2Password: "password"})
+	if err != nil {
+		t.Fatalf("render.Link: %v", err)
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		t.Fatalf("parse link: %v", err)
+	}
+	if want := parsed.Query().Get("pinSHA256"); got != want {
+		t.Errorf("xrayCertPin = %q, but the link carries pinSHA256=%q", got, want)
+	}
+
+	if _, err := xrayCertPin([]byte("not a certificate")); err == nil {
 		t.Error("a malformed certificate must error")
 	}
 }

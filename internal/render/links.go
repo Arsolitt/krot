@@ -18,7 +18,9 @@ import (
 // order and encoding reproduce the v1 subscription format byte for byte.
 // A hysteria2 pin comes from the inbound's certificate when it carries one,
 // otherwise from its stored pin_sha256 (static-mode base configs hold the
-// certificate, so the control plane keeps only the pin).
+// certificate, so the control plane keeps only the pin). Both are the Xray
+// form of pinSHA256 - hex of sha256 over the leaf certificate DER - because
+// clients hex-decode that parameter.
 func Link(server string, in model.Inbound, u model.User) (string, error) {
 	fragment := server + "-" + in.Tag
 
@@ -77,8 +79,9 @@ func xrayCertPin(certPEM string) (string, error) {
 // hy2Pin returns the pinSHA256 value for a hysteria2 link: the leaf-
 // certificate pin derived from the inbound's certificate when it carries
 // one, otherwise the stored pin_sha256 (static-mode base configs hold the
-// certificate, so the control plane keeps only the pin). An inbound with
-// neither cannot yield a client pin.
+// certificate, so the control plane keeps only the pin), which the agent
+// validated to be that same hex form. An inbound with neither cannot yield
+// a client pin.
 func hy2Pin(in model.Inbound) (string, error) {
 	if in.CertPEM != "" {
 		return xrayCertPin(in.CertPEM)
