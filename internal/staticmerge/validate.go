@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/Arsolitt/cheburbox/generate"
-
 	"github.com/Arsolitt/krot/internal/model"
 )
 
@@ -161,7 +159,7 @@ func checkReality(raw []byte, in *baseInbound, decl *model.InboundDecl) error {
 	if !ok || privateKey == "" {
 		return errField(decl.Tag, "tls.reality.private_key", "base inbound has no non-empty %q string", keyPrivateKey)
 	}
-	derived, err := generate.DerivePublicKey(privateKey)
+	derived, err := derivePublicKey(privateKey)
 	if err != nil {
 		return fmt.Errorf("inbound %q: reality_public_key: derive base public key: %w", decl.Tag, err)
 	}
@@ -227,7 +225,7 @@ func checkPin(raw []byte, in *baseInbound, decl *model.InboundDecl, dataDir stri
 	if err != nil {
 		return fmt.Errorf("inbound %q: tls.certificate_path: read certificate %s: %w", decl.Tag, path, err)
 	}
-	pin, err := generate.ComputePinSHA256(certPEM)
+	pin, err := computePinSHA256(certPEM)
 	if err != nil {
 		return fmt.Errorf("inbound %q: pin_sha256: compute certificate pin: %w", decl.Tag, err)
 	}
