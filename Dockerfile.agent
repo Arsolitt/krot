@@ -9,6 +9,7 @@ RUN go mod download
 COPY cmd/krot-agent/ cmd/krot-agent/
 COPY internal/model/ internal/model/
 COPY internal/render/ internal/render/
+COPY internal/staticmerge/ internal/staticmerge/
 COPY internal/agentapi/ internal/agentapi/
 
 RUN CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o /out/krot-agent ./cmd/krot-agent

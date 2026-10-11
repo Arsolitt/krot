@@ -4,6 +4,7 @@
 !internal/store/
 !internal/model/
 !internal/render/
+!internal/staticmerge/
 !internal/authentik/
 !internal/directory/
 !internal/zitadel/
