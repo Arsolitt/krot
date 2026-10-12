@@ -383,14 +383,49 @@ same endpoint serves both halves of a provider's catalogue:
 
 - **Xray JSON config** (single object or array): the provider's `outbounds`
   survive verbatim; the config gets krot's `dns` block and krot's routing
-  rules mapped onto the provider's own outbound tags (auto-detected, or named
-  by the `proxy_tag` field of the form). The rules are *prepended* to the
-  provider's own `routing.rules`, whose balancers keep their default route.
+  rules mapped onto the provider's own outbound tags, prepended ahead of the
+  provider's rules, whose balancers keep their default route. The proxy tag is
+  the one the routing rules point the tunneled traffic at; it resolves in this
+  order: the `proxy_tag` field of the form when filled — a hint that must name
+  an outbound of the provider config, rejected by name if it does not; then
+  the first outbound that is neither direct/block/DNS-plumbing by tag, nor a
+  selector/urltest/balancer aggregate, nor a tunnel-less protocol
+  (freedom/blackhole/dns); finally, for configs whose only concrete outbound
+  is loopback or freedom-adjacent, the first remaining non-plumbing outbound.
+  When nothing resolves, the request fails closed with the available outbound
+  tags named, never a config with broken references.
 - **Link list** (plain or base64): re-emitted as-is with the
   `happ://routing/onadd/<base64>` deeplink prepended and advertised in the
   `routing` header, exactly like a `/sub` response.
 - Anything else fails closed: an unrecognized payload is never served as a
   subscription.
+
+To verify the proxy tag resolution without a client, the emitted rules are
+plain JSON — fetch them through the `routing` header, which carries the
+`happ://routing/onadd/...` deeplink (its base64 decodes to the profile), or
+through the baked config itself. Only the provider's own JSON shows its
+outbound tags; the rebuilt response shows both the tags and what the rules
+reference, and the two must agree:
+
+```sh
+# Outbound tags of the provider config (via your own access to it):
+curl -s '<provider subscription URL>' | jq -r '.. | objects | select(has("outbounds")) | .outbounds[].tag'
+
+# Referenced tags vs available tags of the rebuilt response: ok=true means
+# every rule target exists in the config.
+curl -s -H 'User-Agent: Happ' 'https://vpn.example/rbr/<token>' |
+  jq -r '[.. | objects | select(has("routing")) | .routing.rules[].outboundTag] as $refs |
+         ([.. | objects | select(has("outbounds")) | .outbounds[].tag] | unique) as $tags |
+         {refs: $refs, tags: $tags, ok: ($refs - $tags | length == 0)}'
+```
+
+The definitive check is the client's core: an Xray-based client refuses to
+start a config with an unknown rule target, so an imported rebuilt
+subscription that connects *and* routes as intended is proof the mapping
+holds. If the auto-detection picked the wrong outbound — an unusual config
+with several concrete tunnels, where the first one is not the intended proxy —
+re-generate the link with the `proxy_tag` field of the form naming the right
+tag.
 
 The fetch relays the identity headers a provider's device accounting reads —
 `User-Agent`, `HWID`/`X-Hwid`, `X-Ver-Os`, `X-Ver`, `X-Device-Model`,

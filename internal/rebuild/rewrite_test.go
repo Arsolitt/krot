@@ -728,3 +728,28 @@ func TestRewriteNotModified(t *testing.T) {
 		}
 	})
 }
+
+// TestRewriteToleratesNilLogger pins the exported entry point against a nil
+// logger: a caller without one gets a working rewrite instead of a nil
+// dereference on the first log line.
+func TestRewriteToleratesNilLogger(t *testing.T) {
+	f := &fakeFetcher{
+		result: okResult(`{"outbounds":[{"protocol":"freedom","tag":"direct"},{"protocol":"vless","tag":"proxy"}]}`),
+	}
+	out, err := Rewrite(
+		context.Background(),
+		f,
+		rewriteTestKey,
+		testSessionID,
+		up.Request{URL: testUpstreamURL},
+		[]byte(testProfileJSON),
+		"", "", "",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Rewrite with a nil logger: %v", err)
+	}
+	if len(out.Body) == 0 {
+		t.Fatal("Rewrite with a nil logger produced no body")
+	}
+}

@@ -48,6 +48,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   per rebuilt subscription), and `POST /rebuild` carries a per-IP failure
   budget and compares the gate secret by digest.
 
+### Fixed
+
+- The re-builder's `Rewrite` entry point tolerates a nil logger, defaulting to
+  the process logger instead of dereferencing nil on its first log line; a
+  no-op in the control plane, which always supplies one, but the exported API
+  should not panic on a call shape it accepts.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added

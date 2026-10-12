@@ -167,6 +167,12 @@ func Rewrite(
 	proxyTagHint, adsMode, routeMode string,
 	logger *slog.Logger,
 ) (up.Result, error) {
+	// The exported entry point tolerates a nil logger, like the rest of the
+	// package's constructors: a caller that has none still gets a working
+	// rewrite instead of a nil dereference on the first log line.
+	if logger == nil {
+		logger = slog.Default()
+	}
 	profile, err := newHappProfile(profileJSON, adsMode)
 	if err != nil {
 		return up.Result{}, err
