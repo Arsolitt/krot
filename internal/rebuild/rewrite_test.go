@@ -757,8 +757,9 @@ func TestRewriteToleratesNilLogger(t *testing.T) {
 
 // TestRewriteLogsTagMapping pins the operator-facing log contract: a JSON
 // rebuild reports the proxy tag every krot rule targets, the tags the
-// provider config carried and the hint when the form named one, while a
-// link-list rebuild carries no tag fields at all.
+// provider config carried and the hint when the form named one; a link-list
+// rebuild states no tag fields at all, so an empty value can never read as a
+// mapping problem.
 func TestRewriteLogsTagMapping(t *testing.T) {
 	const providerJSON = `{"outbounds":[{"protocol":"freedom","tag":"direct"},` +
 		`{"protocol":"blackhole","tag":"block"},{"protocol":"vless","tag":"proxy"}]}`
@@ -785,7 +786,8 @@ func TestRewriteLogsTagMapping(t *testing.T) {
 		{
 			name:     "link list",
 			body:     testLinks,
-			wantTags: []string{"format=links", "proxy_tag=", "outbound_tags="},
+			wantTags: []string{"format=links"},
+			absent:   []string{"proxy_tag", "outbound_tags"},
 		},
 	}
 	for _, tc := range tests {

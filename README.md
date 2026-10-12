@@ -425,15 +425,16 @@ curl -s -H 'User-Agent: Happ' 'https://vpn.example/rbr/<token>' |
           missing_outbound: ($refs - $tags), missing_balancer: ($brefs - $bal)}'
 ```
 
-The rebuilt response is also the only place the picked tag is stated on a
-success: the control plane's `subscription rebuilt` log line names both the
-`proxy_tag` it targeted and the `outbound_tags` the config carried (plus
-`proxy_tag_hint` when the form named one), so an operator reading the logs
-gets the mapping without decoding the body. A bad `proxy_tag` from the form
-is not rejected up front — the seal stores it verbatim and the failure
-surfaces on the first `/rbr` fetch — and the `/rbr` answer for any failure is
-the generic short message, with the detail (including the available tags of an
-unresolvable config) in the same log line.
+A successful JSON rebuild also states the picked tag in the control plane's
+`subscription rebuilt` log line, naming the `proxy_tag` it targeted, the
+`outbound_tags` the config carried (plus `proxy_tag_hint` when the form named
+one), so an operator reading the logs gets the mapping without decoding the
+body; a link-list rebuild carries none of those fields. A bad `proxy_tag` from
+the form is not rejected up front — the seal stores it verbatim and the
+failure surfaces on the first `/rbr` fetch — and the `/rbr` answer for any
+failure is the generic short message: the detail, including the available tags
+of an unresolvable config, lands in the separate `subscription rebuild
+failed` log line, not in the response.
 
 The definitive check is the client's core: an Xray-based client refuses to
 start a config with an unknown rule target, so an imported rebuilt

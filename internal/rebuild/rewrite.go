@@ -232,13 +232,14 @@ func Rewrite(
 	// The JSON path reports the mapping it applied: the tag every krot rule
 	// targets, the tags the provider config carried, and the hint when the
 	// form named one, so an operator can confirm the resolution without
-	// decoding the served body.
-	attrs := []any{
-		"session", sessionID, "format", format, "bytes", len(out.Body),
-		"proxy_tag", proxyTag, "outbound_tags", outboundTags,
-	}
-	if proxyTagHint != "" {
-		attrs = append(attrs, "proxy_tag_hint", proxyTagHint)
+	// decoding the served body. The link-list path carries no tag fields at
+	// all — an empty proxy_tag= would read as a mapping problem.
+	attrs := []any{"session", sessionID, "format", format, "bytes", len(out.Body)}
+	if format == "json" {
+		attrs = append(attrs, "proxy_tag", proxyTag, "outbound_tags", outboundTags)
+		if proxyTagHint != "" {
+			attrs = append(attrs, "proxy_tag_hint", proxyTagHint)
+		}
 	}
 	logger.InfoContext(ctx, "subscription rebuilt", attrs...)
 	return out, nil
