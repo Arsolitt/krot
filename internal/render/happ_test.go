@@ -194,7 +194,7 @@ func TestHappRoutingProfileRouting(t *testing.T) {
 	for key, want := range map[string]string{
 		"RemoteDNSType":     "DoH",
 		"RemoteDNSDomain":   "https://dns.google/dns-query",
-		"RemoteDNSIP":       "8.8.8.8",
+		"RemoteDNSIP":       dotServer,
 		"DomesticDNSType":   "DoU",
 		"DomesticDNSDomain": "",
 		"DomesticDNSIP":     "77.88.8.8",
@@ -205,8 +205,8 @@ func TestHappRoutingProfileRouting(t *testing.T) {
 	}
 
 	hosts, ok := profile["DnsHosts"].(map[string]any)
-	if !ok || len(hosts) != 1 || hosts["dns.google"] != "8.8.8.8" {
-		t.Errorf("DnsHosts: got %#v, want {\"dns.google\": \"8.8.8.8\"}", profile["DnsHosts"])
+	if !ok || len(hosts) != 1 || hosts["dns.google"] != dotServer {
+		t.Errorf("DnsHosts: got %#v, want {\"dns.google\": %q}", profile["DnsHosts"], dotServer)
 	}
 
 	// Tags are resolved from the client's own geofiles, so the profile must

@@ -32,18 +32,18 @@ func TestValidateTable(t *testing.T) {
 		`"tls":{"server_name":"ams.example.com"}}]}`)
 	transportBase := []byte(`{"inbounds":[{"type":"vless","tag":"vless-in","listen_port":443,"users":[],` +
 		`"tls":{"server_name":"ams.example.com"},"transport":{"type":"http"}}]}`)
-	noCertBase := []byte(fmt.Sprintf(`{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
-		`"obfs":{"type":"salamander","password":%q},"tls":{"server_name":"ams.example.com"}}]}`, obfsPassword))
-	missingCertBase := []byte(
-		fmt.Sprintf(`{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
+	noCertBase := fmt.Appendf(nil, `{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
+		`"obfs":{"type":"salamander","password":%q},"tls":{"server_name":"ams.example.com"}}]}`, obfsPassword)
+	missingCertBase := fmt.Appendf(nil,
+		`{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
 			`"obfs":{"type":"salamander","password":%q},`+
-			`"tls":{"server_name":"ams.example.com","certificate_path":"certs/missing.crt"}}]}`, obfsPassword),
+			`"tls":{"server_name":"ams.example.com","certificate_path":"certs/missing.crt"}}]}`, obfsPassword,
 	)
 	noPortBase := []byte(`{"inbounds":[{"type":"vless","tag":"vless-in","users":[],` +
 		`"tls":{"server_name":"ams.example.com","reality":{"private_key":"` +
 		fixtureString(t, base, "inbounds", 0, "tls", "reality", "private_key") + `","short_id":"` + shortID + `"}}}]}`)
-	noSNIBase := []byte(fmt.Sprintf(`{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
-		`"obfs":{"type":"salamander","password":%q}}]}`, obfsPassword))
+	noSNIBase := fmt.Appendf(nil, `{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
+		`"obfs":{"type":"salamander","password":%q}}]}`, obfsPassword)
 	badKeyBase := []byte(`{"inbounds":[{"type":"vless","tag":"vless-in","listen_port":443,"users":[],` +
 		`"tls":{"server_name":"ams.example.com","reality":{"private_key":"not-base64!!","short_id":"deadbeef00"}}}]}`)
 
@@ -255,8 +255,8 @@ func TestValidateAcceptsStringShortID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("derive public key: %v", err)
 	}
-	base := []byte(fmt.Sprintf(`{"inbounds":[{"type":"vless","tag":"vless-in","listen_port":443,"users":[],`+
-		`"tls":{"server_name":"ams.example.com","reality":{"private_key":%q,"short_id":"deadbeef00"}}}]}`, privateKey))
+	base := fmt.Appendf(nil, `{"inbounds":[{"type":"vless","tag":"vless-in","listen_port":443,"users":[],`+
+		`"tls":{"server_name":"ams.example.com","reality":{"private_key":%q,"short_id":"deadbeef00"}}}]}`, privateKey)
 	decl := model.InboundDecl{
 		Tag: vlessTag, Type: model.InboundVLESSReality, SNI: sni, ListenPort: 443,
 		RealityPublicKey: publicKey, RealityShortID: "deadbeef00",
@@ -313,9 +313,9 @@ func TestValidateAbsoluteCertificatePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compute pin: %v", err)
 	}
-	base := []byte(fmt.Sprintf(`{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
+	base := fmt.Appendf(nil, `{"inbounds":[{"type":"hysteria2","tag":"hy2-in","listen_port":443,"users":[],`+
 		`"obfs":{"type":"salamander","password":"fixture-obfs"},`+
-		`"tls":{"server_name":"ams.example.com","certificate_path":%q}}]}`, absolute))
+		`"tls":{"server_name":"ams.example.com","certificate_path":%q}}]}`, absolute)
 	decl := model.InboundDecl{
 		Tag: hy2Tag, Type: model.InboundHysteria2, SNI: sni, ListenPort: 443,
 		ObfsPassword: "fixture-obfs", PinSHA256: pin,

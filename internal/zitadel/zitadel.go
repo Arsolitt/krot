@@ -130,6 +130,10 @@ type apiAuthorization struct {
 	Roles []apiRole `json:"roles"`
 }
 
+// jsonNull is the proto3-JSON spelling of an absent 64-bit integer; the
+// literal is repeated across the decoder table and compares below.
+const jsonNull = "null"
+
 // connectInt64 decodes a proto3-JSON int64: Connect-JSON (like protojson)
 // encodes 64-bit integers as strings, while the v2 API documentation shows
 // the same fields as numbers. Both encodings are accepted; null and the
@@ -139,7 +143,7 @@ type connectInt64 int64
 // UnmarshalJSON implements json.Unmarshaler for both encodings.
 func (n *connectInt64) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), `"`)
-	if s == "null" || s == "" {
+	if s == jsonNull || s == "" {
 		*n = 0
 		return nil
 	}

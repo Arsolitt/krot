@@ -375,9 +375,9 @@ func TestRenderOmitsFlowWhenBaseHasNone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("derive public key: %v", err)
 	}
-	base := []byte(fmt.Sprintf(`{"inbounds":[{"type":"vless","tag":"vless-in","listen_port":443,`+
+	base := fmt.Appendf(nil, `{"inbounds":[{"type":"vless","tag":"vless-in","listen_port":443,`+
 		`"users":[{"name":"legacy","uuid":"45977ea3-f264-4671-bec9-5195fa960936"}],`+
-		`"tls":{"server_name":"ams.example.com","reality":{"private_key":%q,"short_id":"236205ea41fa19be"}}}]}`, privateKey))
+		`"tls":{"server_name":"ams.example.com","reality":{"private_key":%q,"short_id":"236205ea41fa19be"}}}]}`, privateKey)
 	decls := []model.InboundDecl{{
 		Tag: vlessTag, Type: model.InboundVLESSReality, SNI: sni, ListenPort: 443,
 		RealityPublicKey: publicKey, RealityShortID: "236205ea41fa19be",

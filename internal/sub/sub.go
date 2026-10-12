@@ -236,17 +236,17 @@ func (s *Server) handleSub(w http.ResponseWriter, r *http.Request) {
 	s.logger.InfoContext(r.Context(), "subscription served", "user", user.Name, "links", len(links))
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("profile-title", s.profile.Title)
-	w.Header().Set("profile-update-interval", strconv.Itoa(s.profile.UpdateIntervalHours))
+	w.Header().Set("Profile-Title", s.profile.Title)
+	w.Header().Set("Profile-Update-Interval", strconv.Itoa(s.profile.UpdateIntervalHours))
 	// Advertised only when configured: an empty support-url header tells the
 	// client there is a support contact and gives it nothing to open.
 	if s.profile.SupportURL != "" {
-		w.Header().Set("support-url", s.profile.SupportURL)
+		w.Header().Set("Support-Url", s.profile.SupportURL)
 	}
 	// Advertised only when a profile exists: an empty routing header would
 	// push clients onto Happ's built-in Default profile.
 	if s.profile.RoutingURI != "" {
-		w.Header().Set("routing", s.profile.RoutingURI)
+		w.Header().Set("Routing", s.profile.RoutingURI)
 	}
 	_, _ = w.Write([]byte(Render(User{Name: user.Name, UUID: user.Subject, Links: links})))
 }

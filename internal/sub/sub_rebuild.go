@@ -116,8 +116,8 @@ func (s *Server) handleRebuild(
 	}
 	// A provider that advertises no title gets the control plane's own, so
 	// Happ always shows a subscription name.
-	if h.Get("profile-title") == "" {
-		h.Set("profile-title", s.profile.Title)
+	if h.Get("Profile-Title") == "" {
+		h.Set("Profile-Title", s.profile.Title)
 	}
 	// The rewrite classifies the content type from the payload (JSON or link
 	// list); the provider's own type is never relayed, and the fallback only

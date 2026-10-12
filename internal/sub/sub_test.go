@@ -111,13 +111,13 @@ func TestHandleSubServesLinksWithHeaders(t *testing.T) {
 	if !strings.HasSuffix(body, "\n") || strings.Count(body, "\n") != 1 {
 		t.Errorf("body must be one link with trailing newline:\n%q", body)
 	}
-	if got := rec.Header().Get("profile-title"); got != "Krot VPN" {
+	if got := rec.Header().Get("Profile-Title"); got != "Krot VPN" {
 		t.Errorf("profile-title = %q", got)
 	}
-	if got := rec.Header().Get("profile-update-interval"); got != "24" {
+	if got := rec.Header().Get("Profile-Update-Interval"); got != "24" {
 		t.Errorf("profile-update-interval = %q", got)
 	}
-	if got := rec.Header().Get("routing"); got != "happ://routing/onadd/cHJvZmlsZQ==" {
+	if got := rec.Header().Get("Routing"); got != "happ://routing/onadd/cHJvZmlsZQ==" {
 		t.Errorf("routing = %q", got)
 	}
 }
@@ -135,7 +135,7 @@ func TestHandleSubOmitsRoutingHeaderWhenUnset(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
-	if vals := rec.Header().Values("routing"); len(vals) != 0 {
+	if vals := rec.Header().Values("Routing"); len(vals) != 0 {
 		t.Errorf("routing header = %q, want absent", vals)
 	}
 }
@@ -153,7 +153,7 @@ func TestHandleSubOmitsSupportURLHeaderWhenUnset(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
-	if vals := rec.Header().Values("support-url"); len(vals) != 0 {
+	if vals := rec.Header().Values("Support-Url"); len(vals) != 0 {
 		t.Errorf("support-url header = %q, want absent", vals)
 	}
 }

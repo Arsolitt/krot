@@ -85,16 +85,16 @@ func TestRebuildHandlerServesRewrittenLinkList(t *testing.T) {
 	if got := rec.Header().Get("Subscription-Userinfo"); got != "upload=1; download=2; total=3; expire=4" {
 		t.Errorf("subscription-userinfo = %q", got)
 	}
-	if got := rec.Header().Get("profile-title"); got != "Provider Plan" {
+	if got := rec.Header().Get("Profile-Title"); got != "Provider Plan" {
 		t.Errorf("profile-title = %q", got)
 	}
-	if got := rec.Header().Get("profile-update-interval"); got != "12" {
+	if got := rec.Header().Get("Profile-Update-Interval"); got != "12" {
 		t.Errorf("profile-update-interval = %q", got)
 	}
-	if got := rec.Header().Get("support-url"); got != "https://support.example.com" {
+	if got := rec.Header().Get("Support-Url"); got != "https://support.example.com" {
 		t.Errorf("support-url = %q", got)
 	}
-	if got := rec.Header().Get("routing"); !strings.HasPrefix(got, "happ://routing/onadd/") {
+	if got := rec.Header().Get("Routing"); !strings.HasPrefix(got, "happ://routing/onadd/") {
 		t.Errorf("routing = %q", got)
 	}
 
@@ -249,7 +249,7 @@ func TestRebuildHandlerFallsBackToControlPlaneProfile(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
-	if got := rec.Header().Get("profile-title"); got != "Krot VPN" {
+	if got := rec.Header().Get("Profile-Title"); got != "Krot VPN" {
 		t.Errorf("profile-title = %q, want control-plane title", got)
 	}
 	if got := rec.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {

@@ -26,6 +26,9 @@ const (
 	keySuffix    = ".key"
 	filePerm0600 = 0o600
 	dirPerm0700  = 0o700
+	// protocolVLESS is the sing-box inbound type of the two VLESS builders
+	// (Reality and WebSocket), which share every field but the transport.
+	protocolVLESS = "vless"
 )
 
 // ErrPortCollision marks two inbounds binding the same transport and port.
@@ -119,7 +122,7 @@ func buildVLESSReality(in model.Inbound, users []model.User) option.Inbound {
 		},
 		Multiplex: &option.InboundMultiplexOptions{Enabled: true},
 	}
-	return option.Inbound{Type: "vless", Tag: in.Tag, Options: &opts}
+	return option.Inbound{Type: protocolVLESS, Tag: in.Tag, Options: &opts}
 }
 
 // buildHysteria2 mirrors the v1 hysteria2 inbound: salamander obfs, h3 TLS
@@ -196,7 +199,7 @@ func buildVLESSWS(in model.Inbound, users []model.User) option.Inbound {
 			KeyPath:         certPath(in.Tag, keySuffix),
 		}
 	}
-	return option.Inbound{Type: "vless", Tag: in.Tag, Options: &opts}
+	return option.Inbound{Type: protocolVLESS, Tag: in.Tag, Options: &opts}
 }
 
 // sortVLESSUsers orders vless users by name for deterministic output.
