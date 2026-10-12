@@ -6,6 +6,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Package list: keep in sync with the go list -deps ./cmd/krot-cp closure and
+# with .dockerignore's whitelist. The CI dockerbuild job builds this image on
+# every branch push, so a missing package fails there rather than at release.
 COPY cmd/krot-cp/ cmd/krot-cp/
 COPY internal/store/ internal/store/
 COPY internal/model/ internal/model/
@@ -17,6 +20,8 @@ COPY internal/oidc/ internal/oidc/
 COPY internal/sub/ internal/sub/
 COPY internal/web/ internal/web/
 COPY internal/cpapi/ internal/cpapi/
+COPY internal/upstream/ internal/upstream/
+COPY internal/rebuild/ internal/rebuild/
 
 RUN go tool templ generate ./internal/web
 

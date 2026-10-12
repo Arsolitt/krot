@@ -1,3 +1,10 @@
+# Deny-by-default build context: everything is excluded, then the files a
+# Dockerfile copies are allowed back in. This is deliberate — it keeps the
+# context small (no .git, no build/, no test fixtures) and makes every future
+# addition an explicit decision. The cost is drift: a new package that reaches
+# a binary must be added BOTH here and to that Dockerfile's COPY list, or the
+# image build breaks. The CI `dockerbuild` job builds both images on every
+# branch push to catch exactly that.
 *
 !cmd/krot-cp/
 !cmd/krot-agent/
@@ -13,6 +20,8 @@
 !internal/web/
 !internal/cpapi/
 !internal/agentapi/
+!internal/upstream/
+!internal/rebuild/
 !go.mod
 !go.sum
 !LICENSE
