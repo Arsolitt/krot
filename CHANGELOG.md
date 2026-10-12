@@ -13,6 +13,23 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.1] - 2026-10-12
+
+### Fixed
+
+- The Happ management headers (`Profile-Title`, `Profile-Update-Interval`,
+  `Support-Url`, `Routing`) are now set and read in canonical spelling:
+  identical on the wire — HTTP header names are case-insensitive and Go
+  canonicalizes them anyway — but the canonicalheader linter, stricter in the
+  pinned CI version, rejected the lowercase spelling and failed the release
+  run of v0.4.0.
+- The lint backlog the same stricter run surfaced is cleared: the repeated
+  DNS/resolver, protocol and proto3-JSON literals in `internal/render` and
+  `internal/zitadel` are named constants, and the byte-slice fixtures in the
+  `internal/staticmerge` tests build with `fmt.Appendf` instead of
+  `[]byte(fmt.Sprintf(...))`. `golangci-lint run ./cmd/... ./internal/...`
+  reports zero issues under both the local and the pinned CI version.
+
 ## [0.4.0] - 2026-10-12
 
 ### Added
