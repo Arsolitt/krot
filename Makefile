@@ -34,7 +34,21 @@ test:
 	CGO_ENABLED=$(CGO_ENABLED) GOTOOLCHAIN=$(GOTOOLCHAIN) \
 		go test ./...
 
+# Lint gate, pinned like CI: the workflow's GOLANGCI_LINT_VERSION is the one
+# version this repo lints under, and a mismatch has bitten before - the local
+# linter once reported zero issues while CI's stricter version failed the
+# release. The guard fails fast instead of silently linting under a different
+# version; GNU make 4.4 makes each line .SHELLSTATUS-visible, so the check
+# cannot pass silently.
 lint:
+	@want="$$(sed -n 's/^[[:space:]]*GOLANGCI_LINT_VERSION:[[:space:]]*v\{0,1\}\(.*\)$$/\1/p' .github/workflows/ci.yml | head -1)"; \
+	have="golangci-lint $$(golangci-lint version 2>/dev/null | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p')"; \
+	if [ -z "$$want" ]; then echo "lint: GOLANGCI_LINT_VERSION not found in .github/workflows/ci.yml" >&2; exit 1; fi; \
+	if [ "$$have" != "golangci-lint $$want" ]; then \
+		echo "lint: linter mismatch: have '$$have', CI pins '$$want'" >&2; \
+		echo "  install it: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$$want" >&2; \
+		exit 1; \
+	fi
 	golangci-lint run
 	go tool templ fmt -fail .
 
