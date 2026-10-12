@@ -81,6 +81,20 @@ tr:last-child td { border-bottom: none; }
 .err { color: var(--bad); overflow-wrap: anywhere; }
 a { color: var(--accent); }
 
+nav {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  max-width: 46rem;
+  margin: 1.25rem auto 0;
+  padding: 0 1rem;
+  font-size: 0.85rem;
+}
+
+nav a { color: var(--muted); text-decoration: none; }
+nav a:hover { color: var(--text); }
+nav a.brand { color: var(--accent); font-weight: 700; letter-spacing: 0.02em; }
+
 footer {
   max-width: 46rem;
   margin: 0 auto 3rem;

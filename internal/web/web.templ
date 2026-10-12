@@ -1,8 +1,20 @@
 package web
 
-// layout is the shared page skeleton: head, stylesheet, htmx. The body
-// content arrives as a component parameter.
-templ layout(title string, body templ.Component) {
+// Nav is the conditional page navigation: which links apply to the session
+// rendering the page. Admin shows only when AdminChecker allows the subject;
+// SignIn and SignOut are mutually exclusive; Portal and Rebuild are always
+// rendered (the latter doubles as the public re-builder's entry point).
+type Nav struct {
+	SignedIn bool
+	Admin    bool
+	SignIn   bool
+	SignOut  bool
+}
+
+// layout is the shared page skeleton: head, stylesheet, htmx, the
+// conditional navigation bar. The body content arrives as a component
+// parameter.
+templ layout(title string, d Nav, body templ.Component) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -13,6 +25,20 @@ templ layout(title string, body templ.Component) {
 			<script src="/static/htmx.min.js"></script>
 		</head>
 		<body>
+			<nav>
+				<a href="/" class="brand">krot</a>
+				<a href="/">Portal</a>
+				if d.Admin {
+					<a href="/admin">Admin</a>
+				}
+				<a href="/rebuild">Rebuild</a>
+				if d.SignIn {
+					<a href="/login">Sign in</a>
+				}
+				if d.SignOut {
+					<a href="/logout">Sign out</a>
+				}
+			</nav>
 			<main>
 				@body
 			</main>
@@ -23,20 +49,29 @@ templ layout(title string, body templ.Component) {
 	</html>
 }
 
+// signedInAs is the shared identity line: the signed-in username, rendered
+// nothing at all when anonymous.
+templ signedInAs(username string) {
+	if username != "" {
+		<p class="subtitle">Signed in as { username }</p>
+	}
+}
+
 // IndexData carries the user page state.
 type IndexData struct {
+	Nav      Nav
 	Username string
 	URL      string
 }
 
 // index is the portal front page: subscription URL with a copy button.
 templ index(d IndexData) {
-	@layout("Krot VPN", indexBody(d))
+	@layout("Krot VPN", d.Nav, indexBody(d))
 }
 
 templ indexBody(d IndexData) {
 	<h1>Krot VPN</h1>
-	<p class="subtitle">Signed in as { d.Username }</p>
+	@signedInAs(d.Username)
 	if d.URL == "" {
 		<div class="card">
 			<p>No subscription is provisioned for your account. Ask an administrator to add you to the VPN group.</p>
@@ -52,21 +87,24 @@ templ indexBody(d IndexData) {
 	}
 	<p><a href="/logout">Sign out</a></p>
 	<script>
-			document.getElementById('copy')?.addEventListener('click', async (ev) => {
-				const btn = ev.currentTarget;
-				try {
-					await navigator.clipboard.writeText(btn.dataset.url);
-					btn.textContent = 'Copied';
-					setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
-				} catch {
-					btn.textContent = 'Copy failed';
-				}
-			});
-		</script>
+		document.getElementById("copy")?.addEventListener("click", async (ev) => {
+			const btn = ev.currentTarget;
+			try {
+				await navigator.clipboard.writeText(btn.dataset.url);
+				btn.textContent = "Copied";
+				setTimeout(() => {
+					btn.textContent = "Copy";
+				}, 1500);
+			} catch {
+				btn.textContent = "Copy failed";
+			}
+		});
+	</script>
 }
 
 // RoutingData carries the public routing-profile page state.
 type RoutingData struct {
+	Nav      Nav
 	Title    string
 	Deeplink string
 }
@@ -74,7 +112,7 @@ type RoutingData struct {
 // routing is the public Happ routing-profile page: the import link, a copy
 // button for the deeplink, and the raw JSON endpoint.
 templ routing(d RoutingData) {
-	@layout(d.Title+" routing", routingBody(d))
+	@layout(d.Title+" routing", d.Nav, routingBody(d))
 }
 
 templ routingBody(d RoutingData) {
@@ -91,21 +129,138 @@ templ routingBody(d RoutingData) {
 		<p>Profile name: <span class="mono">{ d.Title }</span> — importing it again updates the profile instead of adding a second one.</p>
 	</div>
 	<script>
-			document.getElementById('copy')?.addEventListener('click', async (ev) => {
-				const btn = ev.currentTarget;
-				try {
-					await navigator.clipboard.writeText(btn.dataset.url);
-					btn.textContent = 'Copied';
-					setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
-				} catch {
-					btn.textContent = 'Copy failed';
-				}
-			});
+		document.getElementById("copy")?.addEventListener("click", async (ev) => {
+			const btn = ev.currentTarget;
+			try {
+				await navigator.clipboard.writeText(btn.dataset.url);
+				btn.textContent = "Copied";
+				setTimeout(() => {
+					btn.textContent = "Copy";
+				}, 1500);
+			} catch {
+				btn.textContent = "Copy failed";
+			}
+		});
+	</script>
+}
+
+// RebuildData carries the subscription re-builder page state.
+type RebuildData struct {
+	Nav       Nav
+	Title     string
+	Result    *RebuildResultData
+	SecretSet bool
+}
+
+// RebuildResultData is the re-builder outcome; exactly one of Link or Error
+// is set.
+type RebuildResultData struct {
+	Link  string
+	Error string
+}
+
+// rebuildIdentityLine is the note shown to a signed-in visitor of the
+// re-builder: it explains where the produced link leads and that the form
+// itself is not authenticated by default.
+templ rebuildIdentityLine() {
+	<p class="subtitle">The link below is the whole credential: anyone it is shared with can fetch the rebuilt subscription.</p>
+}
+
+// rebuildPage is the public subscription re-builder: it turns a provider
+// subscription link into a /rbr/ link that serves the krot routing profile.
+templ rebuildPage(d RebuildData) {
+	@layout("Rebuild subscription — "+d.Title, d.Nav, rebuildBody(d))
+}
+
+templ rebuildBody(d RebuildData) {
+	<h1>{ d.Title }</h1>
+	<p class="subtitle">Subscription re-builder</p>
+	if d.Nav.SignedIn {
+		@rebuildIdentityLine()
+	}
+	<div class="card">
+		<p>Paste a provider subscription link. krot fetches it server-side and rebuilds it with the krot routing profile, so Happ clients that cannot import a profile still get ads blocked and Russian traffic routed directly.</p>
+		<form hx-post="/rebuild" hx-target="#rebuild-result" hx-swap="innerHTML" method="post" action="/rebuild">
+			<p>
+				<label for="upstream_url">Provider subscription URL</label>
+				<br/>
+				<input id="upstream_url" name="upstream_url" type="url" required maxlength="2048" placeholder="https://provider.example/sub"/>
+			</p>
+			<p>
+				<label for="proxy_tag">Proxy outbound tag (optional)</label>
+				<br/>
+				<input id="proxy_tag" name="proxy_tag" placeholder="auto-detect"/>
+			</p>
+			<p>
+				<label for="ads_mode">Ads blocking</label>
+				<br/>
+				<select id="ads_mode" name="ads_mode">
+					<option value="light" selected>light (geosite:category-ads)</option>
+					<option value="full">full (geosite:category-ads-all)</option>
+				</select>
+			</p>
+			if d.SecretSet {
+				<p>
+					<label for="secret">Access secret</label>
+					<br/>
+					<input id="secret" name="secret" type="password" autocomplete="off"/>
+				</p>
+			}
+			<button type="submit">Build link</button>
+		</form>
+	</div>
+	<div id="rebuild-result">
+		if d.Result != nil {
+			@rebuildResult(*d.Result)
+		}
+	</div>
+	<script>
+		// htmx does not swap 4xx responses by default; the re-builder answers
+		// validation failures with 400 and a fragment, so allow the swap.
+		document.body.addEventListener("htmx:beforeSwap", (ev) => {
+			if (ev.detail.xhr.status === 400) {
+				ev.detail.shouldSwap = true;
+				ev.detail.isError = false;
+			}
+		});
+	</script>
+}
+
+// rebuildResult is the re-builder outcome fragment: the sealed link with a
+// copy button, or the error message.
+templ rebuildResult(d RebuildResultData) {
+	if d.Error != "" {
+		<p class="err">{ d.Error }</p>
+	} else {
+		<div class="card">
+			<p>Rebuilt subscription link — add it to Happ:</p>
+			<div class="suburl">
+				<code id="rebuild-link">{ d.Link }</code>
+				<button id="rebuild-copy" data-url={ d.Link }>Copy</button>
+			</div>
+		</div>
+		<script>
+			document
+				.getElementById("rebuild-copy")
+				?.addEventListener("click", async (ev) => {
+					const btn = ev.currentTarget;
+					try {
+						await navigator.clipboard.writeText(btn.dataset.url);
+						btn.textContent = "Copied";
+						setTimeout(() => {
+							btn.textContent = "Copy";
+						}, 1500);
+					} catch {
+						btn.textContent = "Copy failed";
+					}
+				});
 		</script>
+	}
 }
 
 // AdminPanelData carries the admin fragment state.
 type AdminPanelData struct {
+	Nav      Nav
 	Servers  []ServerView
 	Users    []UserView
 	Sync     SyncView
@@ -139,12 +294,12 @@ type SyncView struct {
 
 // admin is the admin page shell; the panel fragment refreshes via htmx.
 templ admin(d AdminPanelData) {
-	@layout("Krot VPN — admin", adminBody(d))
+	@layout("Krot VPN — admin", d.Nav, adminBody(d))
 }
 
 templ adminBody(d AdminPanelData) {
 	<h1>Krot VPN — admin</h1>
-	<p class="subtitle">Signed in as { d.Username } · <a href="/">user page</a> · <a href="/logout">sign out</a></p>
+	<p class="subtitle">Signed in as { d.Username } · <a href="/">user page</a></p>
 	<div hx-get="/admin/panel" hx-trigger="load, every 30s" hx-swap="innerHTML">
 		@adminPanel(d)
 	</div>

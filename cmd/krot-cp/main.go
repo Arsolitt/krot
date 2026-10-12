@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"flag"
@@ -24,9 +26,11 @@ import (
 	"github.com/Arsolitt/krot/internal/cpapi"
 	"github.com/Arsolitt/krot/internal/directory"
 	"github.com/Arsolitt/krot/internal/oidc"
+	"github.com/Arsolitt/krot/internal/rebuild"
 	"github.com/Arsolitt/krot/internal/render"
 	"github.com/Arsolitt/krot/internal/store"
 	"github.com/Arsolitt/krot/internal/sub"
+	"github.com/Arsolitt/krot/internal/upstream"
 	"github.com/Arsolitt/krot/internal/web"
 	"github.com/Arsolitt/krot/internal/zitadel"
 )
@@ -60,6 +64,15 @@ const (
 	defaultProfileTitle    = "Krot VPN"
 	defaultProfileSupport  = ""
 	defaultUpdateIntervalH = 24
+
+	// rebuildKeyNamespace scopes the derivation of the fallback rebuild key:
+	// with no KROT_REBUILD_KEY the /rbr capability tokens are sealed under
+	// SHA-256(KROT_TOKEN_KEY || this). Rotating the token key therefore
+	// rotates the rebuild key too, and setting a dedicated key or narrowing
+	// this string revokes every issued /rbr link at once.
+	rebuildKeyNamespace = "krot-rebuild:"
+	// rebuildKeyEnv is the optional dedicated rebuild key variable.
+	rebuildKeyEnv = "KROT_REBUILD_KEY"
 )
 
 // config is the environment-derived configuration. Non-secret knobs come
@@ -86,8 +99,10 @@ type config struct {
 	ZitadelRole         string
 	ZitadelAdminRole    string
 	IDP                 string
+	RebuildSecret       string
 	CookieKey           []byte
 	TokenKey            []byte
+	RebuildKey          []byte
 	ProfileIntervalH    int
 	CacheTTL            time.Duration
 	Grace               time.Duration
@@ -184,9 +199,13 @@ func loadConfig() (config, error) {
 	}
 
 	cfg.TokenNamespace = envString("KROT_TOKEN_NAMESPACE", sub.DefaultTokenNamespace)
+	cfg.RebuildSecret = os.Getenv("KROT_REBUILD_SECRET")
 
 	var err error
 	if cfg.TokenKey, err = decodeKey("KROT_TOKEN_KEY"); err != nil {
+		return config{}, err
+	}
+	if cfg.RebuildKey, err = decodeRebuildKey(cfg.TokenKey); err != nil {
 		return config{}, err
 	}
 	if cfg.CookieKey, err = decodeKey("KROT_COOKIE_KEY"); err != nil {
@@ -435,11 +454,13 @@ func newMux(
 			default:
 			}
 		},
+		RebuildCreate:      buildRebuild(cfg.RebuildKey, cfg.RebuildSecret),
 		BaseURL:            cfg.BaseURL,
 		Logger:             logger,
 		RoutingURI:         routingURI,
 		RoutingProfileJSON: routingProfile,
 		ProfileTitle:       cfg.ProfileTitle,
+		RebuildSecretSet:   cfg.RebuildSecret != "",
 	}
 
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -483,6 +504,8 @@ func newMux(
 	mux.HandleFunc("GET /routing.json", pages.RoutingProfile)
 	mux.HandleFunc("GET /routing/import", pages.RoutingImport)
 
+	registerRebuild(mux, cfg, pages, subs, routingProfile, logger)
+
 	cpapi.New(cfg.AgentToken, st, logger).Register(mux)
 
 	mux.Handle("GET /sub/{token}", subs.Handler())
@@ -507,6 +530,26 @@ func newMux(
 	}
 
 	return mux
+}
+
+// registerRebuild mounts the public subscription re-builder: the /rebuild
+// form seals a provider URL into a capability token, and /rbr serves the
+// rebuilt subscription with the krot routing profile enforced. The form is
+// gated by KROT_REBUILD_SECRET when one is configured; the sealed token is
+// the only credential /rbr accepts, exactly as /sub treats its own token.
+func registerRebuild(
+	mux *http.ServeMux,
+	cfg config,
+	pages *web.Deps,
+	subs *sub.Server,
+	routingProfile []byte,
+	logger *slog.Logger,
+) {
+	mux.HandleFunc("GET /rebuild", pages.RebuildPage)
+	mux.HandleFunc("POST /rebuild", pages.RebuildCreateHandler)
+	mux.Handle("GET /rbr/{token}", subs.RebuildHandler(
+		cfg.RebuildKey, upstream.NewFetcher(nil, logger), routingProfile, logger,
+	))
 }
 
 // envString reads an environment variable with a default.
@@ -540,7 +583,8 @@ func envDuration(name string, def time.Duration) (time.Duration, error) {
 	return d, nil
 }
 
-// decodeKey decodes a base64-encoded 32-byte secret.
+// decodeKey reads a 32-byte key from the named environment variable, encoded
+// as unpadded standard base64.
 func decodeKey(name string) ([]byte, error) {
 	raw, err := base64.RawStdEncoding.DecodeString(os.Getenv(name))
 	if err != nil {
@@ -550,4 +594,44 @@ func decodeKey(name string) ([]byte, error) {
 		return nil, fmt.Errorf("%s: decoded %d bytes, want %d", name, len(raw), keyLen)
 	}
 	return raw, nil
+}
+
+// decodeRebuildKey reads the key sealing /rbr capability tokens from
+// KROT_REBUILD_KEY. The variable is optional: with it unset the key is
+// derived from the token key, so an instance that never rotates
+// KROT_TOKEN_KEY keeps the /rbr links it issued valid across upgrades.
+func decodeRebuildKey(tokenKey []byte) ([]byte, error) {
+	if os.Getenv(rebuildKeyEnv) == "" {
+		sum := sha256.Sum256(append(append([]byte{}, tokenKey...), rebuildKeyNamespace...))
+		return sum[:], nil
+	}
+	return decodeKey(rebuildKeyEnv)
+}
+
+// buildRebuild seals one rebuild request into a /rbr capability token,
+// checking the generator secret when one is configured. The check compares
+// SHA-256 digests of the submitted and configured secrets with
+// subtle.ConstantTimeCompare: both are always 32 bytes, so neither the
+// secret's value nor its length is observable through the comparison. The
+// token embeds the provider URL (with its query secret), so neither the URL
+// nor the token is ever logged.
+func buildRebuild(rebuildKey []byte, rebuildSecret string) func(
+	ctx context.Context, r *http.Request, upstreamURL, proxyTag, adsMode, secret string,
+) (string, error) {
+	return func(
+		_ context.Context, _ *http.Request, upstreamURL, proxyTag, adsMode, secret string,
+	) (string, error) {
+		if rebuildSecret != "" {
+			submitted := sha256.Sum256([]byte(secret))
+			configured := sha256.Sum256([]byte(rebuildSecret))
+			if subtle.ConstantTimeCompare(submitted[:], configured[:]) != 1 {
+				return "", errors.New("wrong access secret")
+			}
+		}
+		return rebuild.Seal(rebuildKey, upstream.Spec{
+			UpstreamURL: upstreamURL,
+			ProxyTag:    proxyTag,
+			AdsMode:     adsMode,
+		})
+	}
 }
