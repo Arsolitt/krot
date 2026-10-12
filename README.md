@@ -171,6 +171,8 @@ answers `503` until it succeeds.
 | `KROT_PROFILE_TITLE` | `Krot VPN` | no | Profile name in the subscription headers and in the Happ routing profile. |
 | `KROT_PROFILE_SUPPORT_URL` | — (empty) | no | `support-url` header value of a subscription response. Empty sends no header. |
 | `KROT_PROFILE_UPDATE_INTERVAL_HOURS` | `24` | no | `profile-update-interval` header value, in hours. |
+| `KROT_REBUILD_KEY` | derived from `KROT_TOKEN_KEY` | no | Unpadded base64 of exactly 32 bytes; key sealing the `/rbr` capability tokens of the subscription re-builder. Unset derives it as `SHA-256(KROT_TOKEN_KEY + "krot-rebuild:")`, so existing `/rbr` links survive upgrades; setting a dedicated key, or rotating the token key, revokes every issued link at once. |
+| `KROT_REBUILD_SECRET` | — (empty) | no | Access secret gating `POST /rebuild`, the only writer of new `/rbr` links. Empty leaves the form open to anyone who can reach it; the `/rbr` links themselves are never gated. |
 | `KROT_LISTEN_ADDR` | `:8080` | no | HTTP listen address. |
 
 An unknown `KROT_IDP` is rejected at startup, as is any missing variable the
@@ -360,6 +362,71 @@ it is also served unauthenticated:
 
 `/routing` matches only that exact path; it does not swallow `/routing.json`
 or `/routing/import`.
+
+## Subscription re-builder (`/rebuild` and `/rbr`)
+
+Happ hands a JSON subscription to Xray 1:1 and does not apply routing-profile
+rules to it, so a client whose provider serves an Xray JSON subscription
+cannot use krot's routing profile — the profile only exists for link-list
+subscriptions. The re-builder closes that gap server-side: krot fetches the
+provider subscription itself, rewrites it with the krot routing profile, and
+serves the result.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /rebuild` | Form: paste a provider subscription URL, optionally name the proxy outbound tag, pick the block list. Gated by `KROT_REBUILD_SECRET` when one is set. |
+| `POST /rebuild` | Seals the form into a `/rbr` link and renders it. |
+| `GET /rbr/{token}` | Fetches the provider subscription the token embeds, rewrites it, and serves it with the Happ management headers. The token is a capability: no other auth. |
+
+What the rewrite does depends on the provider payload, which is also how the
+same endpoint serves both halves of a provider's catalogue:
+
+- **Xray JSON config** (single object or array): the provider's `outbounds`
+  survive verbatim; the config gets krot's `dns` block and krot's routing
+  rules mapped onto the provider's own outbound tags (auto-detected, or named
+  by the `proxy_tag` field of the form). The rules are *prepended* to the
+  provider's own `routing.rules`, whose balancers keep their default route.
+- **Link list** (plain or base64): re-emitted as-is with the
+  `happ://routing/onadd/<base64>` deeplink prepended and advertised in the
+  `routing` header, exactly like a `/sub` response.
+- Anything else fails closed: an unrecognized payload is never served as a
+  subscription.
+
+The fetch relays the identity headers a provider's device accounting reads —
+`User-Agent`, `HWID`/`X-Hwid`, `X-Ver-Os`, `X-Ver`, `X-Device-Model`,
+`Device`, `Device-Model` — from the requesting client upstream, and only
+those: cookies, credentials and control-plane headers stay behind. The
+provider URL never appears in a log line, an error or the rendered page: the
+sealed token is the only place it lives, and it is what the link carries.
+
+The fetch is shaped for provider uptime rather than freshness at any cost: a
+per-URL cache with a short TTL, `ETag` revalidation, one in-flight request per
+URL, and a stale copy served while the provider fails. The upstream URL is
+vetted against SSRF: HTTPS only, the standard port only, every resolved
+address public (IPv4 and IPv6, including the transition ranges that embed
+IPv4), redirects re-vetted hop by hop, and a dial-time re-check so a
+rebinding resolver cannot slip past the pre-flight. Responses are bounded:
+at most 8 concurrent fetches, a 2 MiB per-response cap, a 16 MiB total cache
+budget with oldest-first eviction, and a per-URL-and-session cache key so one
+rebuilt subscription never receives the body fetched under another's device
+identity.
+
+Because the provider is untrusted, the served `Content-Type` is krot's own
+classification of the rewritten payload — `application/json` for a baked
+config, `text/plain` for a link list — never the provider's header, and every
+`/rbr` response carries `X-Content-Type-Options: nosniff`: a hostile provider
+cannot turn the control-plane origin into an HTML renderer. `POST /rebuild`
+spends a per-IP failure budget (10 attempts, refilling at 10/min) and compares
+the gate secret by SHA-256 digest, so neither the secret's length nor an
+unlimited guessing rate is observable. When `KROT_REBUILD_SECRET` is unset the
+form stays open by design, as the owner chose; the failure budget is the only
+brake on that path. The budget keys on the request's remote address, never on
+forwarding headers, so behind the chart's ingress it degrades to one shared
+bucket for all callers — a deliberate trade-off: already-issued `/rbr` links
+are unaffected, and the form is a convenience path rather than a serving one.
+Concurrent rebuilds are bounded too (8 in flight; excess answers `503` with
+`Retry-After`), so a burst of parallel requests cannot pile decode-and-marshal
+work onto the control plane even when the fetch itself is a cache hit.
 
 ## Charts
 

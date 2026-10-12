@@ -80,6 +80,12 @@ config:
   KROT_PROFILE_TITLE: Krot VPN
   KROT_PROFILE_SUPPORT_URL: ""
   KROT_PROFILE_UPDATE_INTERVAL_HOURS: "24"
+  # Key of the subscription re-builder tokens (KROT_REBUILD_KEY), unpadded
+  # base64 of 32 bytes. Empty derives it from KROT_TOKEN_KEY, so existing
+  # /rbr links stay valid; set a dedicated key, or rotate the token key, to
+  # revoke every issued link. The optional KROT_REBUILD_SECRET gating the
+  # /rebuild form belongs to the out-of-band Secret (secretName).
+  KROT_REBUILD_KEY: ""
   KROT_LISTEN_ADDR: :8080
 
 resources:

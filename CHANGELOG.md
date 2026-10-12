@@ -13,6 +13,41 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-10-12
+
+### Added
+
+- Conditional navigation on every page (portal, routing, re-builder, admin):
+  a shared nav bar renders Portal and Rebuild always, Admin only for members
+  of the admin group/role (checked without touching the response writer), and
+  Sign in or Sign out according to the session, so the public pages carry no
+  session-only entries and the admin page loses its hand-rolled identity line.
+
+- Subscription re-builder: `GET /rebuild` serves a form that seals a provider
+  subscription URL into a `/rbr` capability token (XChaCha20-Poly1305 under
+  `KROT_REBUILD_KEY`, derived from `KROT_TOKEN_KEY` when unset, so issued
+  links survive upgrades), and `GET /rbr/{token}` fetches that provider
+  subscription and serves it rebuilt with the krot routing profile. The form
+  is gated by `KROT_REBUILD_SECRET` when one is configured; the link itself is
+  never gated, exactly as `/sub` treats its token. An Xray JSON payload (a
+  single config or an array) keeps the provider's outbounds and gets krot's
+  `dns` and routing rules mapped onto the provider's outbound tags
+  (auto-detected, or named in the form), prepended ahead of the provider's own
+  rules; a link list gets the `happ://routing/onadd` deeplink prepended and
+  advertised in the `routing` header; anything else fails closed. The fetch
+  relays the client's identification headers (`User-Agent`, `HWID`/`X-Hwid`,
+  `X-Ver-Os`, `X-Ver`, `X-Device-Model`, `Device`, `Device-Model`) upstream for
+  the provider's device accounting, and is vetted against SSRF (HTTPS, port
+  443, every resolved address public, redirects re-vetted per hop, dial-time
+  re-check), cached per URL with `ETag` revalidation and single-flight, and
+  served stale while the provider fails. Provider URLs and tokens stay out of
+  logs, errors and rendered pages. The served `Content-Type` is krot's
+  classification of the rewritten payload rather than the provider's header,
+  `/rbr` answers with `X-Content-Type-Options: nosniff`, fetches are bounded
+  (8 concurrent, 2 MiB per response, 16 MiB cache budget, cache keys separated
+  per rebuilt subscription), and `POST /rebuild` carries a per-IP failure
+  budget and compares the gate secret by digest.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added
