@@ -45,8 +45,8 @@ lint:
 	have="golangci-lint $$(golangci-lint version 2>/dev/null | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p')"; \
 	if [ -z "$$want" ]; then echo "lint: GOLANGCI_LINT_VERSION not found in .github/workflows/ci.yml" >&2; exit 1; fi; \
 	if [ "$$have" != "golangci-lint $$want" ]; then \
-		echo "lint: linter mismatch: have '$$have', CI pins '$$want'" >&2; \
-		echo "  install it: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$$want" >&2; \
+		echo "lint: linter mismatch: have '$$have', CI pins 'v$$want'" >&2; \
+		echo "  install it: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$$want" >&2; \
 		exit 1; \
 	fi
 	golangci-lint run

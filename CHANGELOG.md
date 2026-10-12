@@ -36,6 +36,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   from the workflow's `GOLANGCI_LINT_VERSION` pin, naming both versions and the
   install command: the mismatch is what let a locally green run pass a tree the
   pinned CI linter then failed.
+- The re-cut tag run of v0.4.0-rc.2 passed the pinned linter on the same
+  commit the v0.4.0 run failed it on: the action's `~/.cache/golangci-lint`
+  was warm from runs under the previous version and vouched for the changed
+  linters' verdicts, a false green that a fresh cache does not reproduce.
+  Release validation therefore rests on the cold-cache run — the freshly cut
+  v0.4.1 run, whose lint gate passed on a cache whose entries cannot predate
+  the fixed tree.
 
 ## [0.4.0] - 2026-10-12
 
