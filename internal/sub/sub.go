@@ -10,6 +10,12 @@
 // their inbounds. Alongside the links, the endpoint advertises the Happ
 // routing profile as a `routing` header so clients split RU/private traffic
 // from the tunnel. Denial is indistinguishable from an unknown token.
+//
+// The /rbr endpoint serves the operator flavour of the same job: a provider
+// subscription sealed into a self-contained capability token is fetched
+// through the SSRF-guarded upstream client and rewritten with that routing
+// profile, so clients that cannot apply their own profile to a JSON
+// passthrough still get krot's rules.
 package sub
 
 import (
