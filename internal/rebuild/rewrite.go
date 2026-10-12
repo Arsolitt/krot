@@ -167,9 +167,10 @@ func Rewrite(
 	proxyTagHint, adsMode, routeMode string,
 	logger *slog.Logger,
 ) (up.Result, error) {
-	// The exported entry point tolerates a nil logger, like the rest of the
-	// package's constructors: a caller that has none still gets a working
-	// rewrite instead of a nil dereference on the first log line.
+	// The exported entry point tolerates a nil logger, as the sibling
+	// packages' constructors do (upstream.NewFetcher, sub.New,
+	// cpapi.New): a caller without one still gets a working rewrite
+	// instead of a nil dereference on the first log line.
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -203,14 +204,21 @@ func Rewrite(
 
 	format := "links"
 	var routingURI string
+	// proxyTag and outboundTags carry the JSON mapping the log reports: the
+	// tag every krot rule targets and the tags the provider config carried.
+	var (
+		proxyTag     string
+		outboundTags []string
+	)
 	if docs, ok, err := jsonDocuments(res.Body); err != nil {
 		return up.Result{}, err
 	} else if ok {
 		format = "json"
 		out.ContentType = contentTypeJSON
-		out.Body, err = bakeDocuments(docs, profile, proxyTagHint, replace, logger)
-		if err != nil {
-			return up.Result{}, err
+		var errBake error
+		out.Body, proxyTag, outboundTags, errBake = bakeDocuments(docs, profile, proxyTagHint, replace, logger)
+		if errBake != nil {
+			return up.Result{}, errBake
 		}
 	} else {
 		out.ContentType = contentTypePlain
@@ -221,8 +229,18 @@ func Rewrite(
 	}
 	out.ProfileHeaders = passthroughHeaders(res.ProfileHeaders, routingURI)
 
-	logger.InfoContext(ctx, "subscription rebuilt",
-		"session", sessionID, "format", format, "bytes", len(out.Body))
+	// The JSON path reports the mapping it applied: the tag every krot rule
+	// targets, the tags the provider config carried, and the hint when the
+	// form named one, so an operator can confirm the resolution without
+	// decoding the served body.
+	attrs := []any{
+		"session", sessionID, "format", format, "bytes", len(out.Body),
+		"proxy_tag", proxyTag, "outbound_tags", outboundTags,
+	}
+	if proxyTagHint != "" {
+		attrs = append(attrs, "proxy_tag_hint", proxyTagHint)
+	}
+	logger.InfoContext(ctx, "subscription rebuilt", attrs...)
 	return out, nil
 }
 
@@ -296,40 +314,53 @@ func jsonDocuments(body []byte) (sniffResult, bool, error) {
 }
 
 // bakeDocuments bakes the krot profile into every config document and
-// re-marshals them in the shape they arrived in.
+// re-marshals them in the shape they arrived in. It returns the proxy tag the
+// rules target and the outbound tags the config carried, so the caller can
+// report the mapping it applied.
 func bakeDocuments(
 	docs sniffResult,
 	profile *happProfile,
 	proxyTagHint string,
 	replace bool,
 	logger *slog.Logger,
-) ([]byte, error) {
+) ([]byte, string, []string, error) {
+	resolved, tags := "", []string(nil)
 	for i, doc := range docs.docs {
-		if err := bakeDocument(doc, profile, proxyTagHint, replace, logger); err != nil {
-			return nil, fmt.Errorf("config %d: %w", i+1, err)
+		tag, err := bakeDocument(doc, profile, proxyTagHint, replace, logger)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("config %d: %w", i+1, err)
+		}
+		if resolved == "" {
+			resolved = tag
+			if outbounds, ok := doc[jsonOutbounds].([]any); ok {
+				tags = outboundTags(outbounds)
+			}
 		}
 	}
 	if docs.asArray {
-		return json.Marshal(docs.docs)
+		body, err := json.Marshal(docs.docs)
+		return body, resolved, tags, err
 	}
-	return json.Marshal(docs.docs[0])
+	body, err := json.Marshal(docs.docs[0])
+	return body, resolved, tags, err
 }
 
 // bakeDocument rewrites one Xray config in place: the krot DNS block replaces
 // the provider's, the krot rules are mapped onto the config's own outbound
 // tags, and the routing strategy is fixed to the profile's, so domain rules
-// keep matching when a name does not resolve.
+// keep matching when a name does not resolve. It returns the tag the proxy
+// rules target.
 func bakeDocument(
 	doc map[string]any,
 	profile *happProfile,
 	proxyTagHint string,
 	replace bool,
 	logger *slog.Logger,
-) error {
+) (string, error) {
 	outbounds, _ := doc[jsonOutbounds].([]any)
 	proxyTag, err := resolveProxyTag(outbounds, proxyTagHint)
 	if err != nil {
-		return err
+		return "", err
 	}
 	directTag := outboundTagMatching(outbounds, directOutbound)
 	blockTag := outboundTagMatching(outbounds, blockOutbound)
@@ -361,7 +392,7 @@ func bakeDocument(
 	routing[jsonRules] = rules
 	routing[jsonDomainStrategy] = profile.strategy()
 	doc[jsonRouting] = routing
-	return nil
+	return proxyTag, nil
 }
 
 // resolveProxyTag picks the outbound the krot rules route through: the hint

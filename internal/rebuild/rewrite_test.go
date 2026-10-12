@@ -1,6 +1,7 @@
 package rebuild
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -751,5 +752,68 @@ func TestRewriteToleratesNilLogger(t *testing.T) {
 	}
 	if len(out.Body) == 0 {
 		t.Fatal("Rewrite with a nil logger produced no body")
+	}
+}
+
+// TestRewriteLogsTagMapping pins the operator-facing log contract: a JSON
+// rebuild reports the proxy tag every krot rule targets, the tags the
+// provider config carried and the hint when the form named one, while a
+// link-list rebuild carries no tag fields at all.
+func TestRewriteLogsTagMapping(t *testing.T) {
+	const providerJSON = `{"outbounds":[{"protocol":"freedom","tag":"direct"},` +
+		`{"protocol":"blackhole","tag":"block"},{"protocol":"vless","tag":"proxy"}]}`
+
+	tests := []struct {
+		name     string
+		body     string
+		hint     string
+		wantTags []string
+		absent   []string
+	}{
+		{
+			name:     "auto-detected json",
+			body:     providerJSON,
+			wantTags: []string{"proxy_tag=proxy", `outbound_tags="[direct block proxy]"`, "format=json"},
+			absent:   []string{"proxy_tag_hint"},
+		},
+		{
+			name:     "hinted json",
+			body:     providerJSON,
+			hint:     "proxy",
+			wantTags: []string{"proxy_tag=proxy", "proxy_tag_hint=proxy", `outbound_tags="[direct block proxy]"`},
+		},
+		{
+			name:     "link list",
+			body:     testLinks,
+			wantTags: []string{"format=links", "proxy_tag=", "outbound_tags="},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, nil))
+			f := &fakeFetcher{result: okResult(tc.body)}
+			if _, err := Rewrite(
+				context.Background(), f, rewriteTestKey, testSessionID,
+				up.Request{URL: testUpstreamURL},
+				[]byte(testProfileJSON), tc.hint, "", "", logger,
+			); err != nil {
+				t.Fatalf("Rewrite: %v", err)
+			}
+			logged := buf.String()
+			if !strings.Contains(logged, "subscription rebuilt") {
+				t.Fatalf("no rebuild log line: %q", logged)
+			}
+			for _, want := range tc.wantTags {
+				if !strings.Contains(logged, want) {
+					t.Errorf("log lacks %q:\n%s", want, logged)
+				}
+			}
+			for _, absent := range tc.absent {
+				if strings.Contains(logged, absent) {
+					t.Errorf("log carries %q unexpectedly:\n%s", absent, logged)
+				}
+			}
+		})
 	}
 }
