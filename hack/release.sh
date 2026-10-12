@@ -18,7 +18,9 @@
 #
 # The tag is `v<version>`; <version> may carry that prefix
 # (`v0.2.0-rc.1`), so the release job can pass `$GITHUB_REF_NAME`
-# straight through.
+# straight through. Tags are signed (`git tag --sign`) and verified before
+# the push: the tag is what the release job, the published images and the
+# charts all hang from, so an unsigned one is never pushed.
 #
 # --check prints, on stdout and only on success, the four facts the release job
 # turns into step outputs (`key=value` lines, appended to `$GITHUB_OUTPUT`):
@@ -163,7 +165,17 @@ if [[ "$(git -C "$repo_root" show -s --format=%B "$target")" =~ \[skip\ ci\]|\[c
   exit 1
 fi
 
-git -C "$repo_root" tag "$tag" "$target"
+# Signed, like every commit on the line: the tag is what the release job,
+# the published images and the charts all hang from. A missing signing key
+# fails here, before anything reaches origin - there is no unsigned path.
+if ! git -C "$repo_root" tag --sign "$tag" --message "krot ${version}" "$target"; then
+  echo "could not create a signed tag ${tag}: check the GPG signing key and retry" >&2
+  exit 1
+fi
+if ! git -C "$repo_root" tag --verify "$tag" > /dev/null 2>&1; then
+  echo "tag ${tag} created but its signature does not verify - aborting before the push" >&2
+  exit 1
+fi
 git -C "$repo_root" push --quiet origin "refs/tags/${tag}"
 
 echo "pushed ${tag} (${channel} track) at $(git -C "$repo_root" rev-parse --short "$target"); the release runs once the gates pass:"
