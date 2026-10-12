@@ -250,8 +250,9 @@ func TestRebuildSmokeLinkList(t *testing.T) {
 	if !strings.Contains(body, link) {
 		t.Errorf("link list response lost the provider link: %s", body)
 	}
-	// The routing header travels with its documented lowercase spelling.
-	routingHeader := getRec.Header().Get("routing") //nolint:canonicalheader // Happ reads lowercase.
+	// Header.Get canonicalizes the lookup, so the canonical spelling reads the
+	// lowercase Happ header the handler set just the same.
+	routingHeader := getRec.Header().Get("Routing")
 	if !strings.HasPrefix(routingHeader, "happ://routing/onadd/") {
 		t.Errorf("routing header = %q, want the onadd deeplink", routingHeader)
 	}
