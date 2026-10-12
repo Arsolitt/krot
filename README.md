@@ -412,12 +412,28 @@ reference, and the two must agree:
 curl -s '<provider subscription URL>' | jq -r '.. | objects | select(has("outbounds")) | .outbounds[].tag'
 
 # Referenced tags vs available tags of the rebuilt response: ok=true means
-# every rule target exists in the config.
+# every rule target exists. Provider rules that route via a balancer carry a
+# balancerTag instead of an outboundTag, so both reference kinds are checked
+# against their own namespace — outbound rules against the config's outbound
+# tags, balancer rules against its registered routing.balancers.
 curl -s -H 'User-Agent: Happ' 'https://vpn.example/rbr/<token>' |
-  jq -r '[.. | objects | select(has("routing")) | .routing.rules[].outboundTag] as $refs |
+  jq -r '[.. | objects | select(has("routing")) | .routing.rules[] | select(has("outboundTag")) | .outboundTag] as $refs |
          ([.. | objects | select(has("outbounds")) | .outbounds[].tag] | unique) as $tags |
-         {refs: $refs, tags: $tags, ok: ($refs - $tags | length == 0)}'
+         ([.. | objects | select(has("routing")) | .routing.rules[] | select(has("balancerTag")) | .balancerTag] | unique) as $brefs |
+         ([.. | objects | select(has("routing")) | .routing.balancers[]?.tag] | unique) as $bal |
+         {ok: (($refs - $tags | length) == 0 and ($brefs - $bal | length) == 0),
+          missing_outbound: ($refs - $tags), missing_balancer: ($brefs - $bal)}'
 ```
+
+The rebuilt response is also the only place the picked tag is stated on a
+success: the control plane's `subscription rebuilt` log line names both the
+`proxy_tag` it targeted and the `outbound_tags` the config carried (plus
+`proxy_tag_hint` when the form named one), so an operator reading the logs
+gets the mapping without decoding the body. A bad `proxy_tag` from the form
+is not rejected up front — the seal stores it verbatim and the failure
+surfaces on the first `/rbr` fetch — and the `/rbr` answer for any failure is
+the generic short message, with the detail (including the available tags of an
+unresolvable config) in the same log line.
 
 The definitive check is the client's core: an Xray-based client refuses to
 start a config with an unknown rule target, so an imported rebuilt

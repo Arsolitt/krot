@@ -50,6 +50,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The `subscription rebuilt` log line now reports the tag mapping the JSON
+  path applied: `proxy_tag` (the tag every krot rule targets), `outbound_tags`
+  (the tags the provider config carried) and `proxy_tag_hint` when the form
+  named one — the only place the picked tag is stated on a success, and the
+  only place the available tags of an unresolvable config are stated on a
+  failure.
+
 - The re-builder's `Rewrite` entry point tolerates a nil logger, defaulting to
   the process logger instead of dereferencing nil on its first log line; a
   no-op in the control plane, which always supplies one, but the exported API
