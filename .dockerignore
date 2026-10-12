@@ -3,8 +3,8 @@
 # context small (no .git, no build/, no test fixtures) and makes every future
 # addition an explicit decision. The cost is drift: a new package that reaches
 # a binary must be added BOTH here and to that Dockerfile's COPY list, or the
-# image build breaks. The CI `dockerbuild` job builds both images on every
-# branch push to catch exactly that.
+# image build breaks. The CI `dockerbuild` job builds both images on main
+# pushes and pull requests to catch exactly that.
 *
 !cmd/krot-cp/
 !cmd/krot-agent/

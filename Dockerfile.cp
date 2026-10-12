@@ -8,7 +8,8 @@ RUN go mod download
 
 # Package list: keep in sync with the go list -deps ./cmd/krot-cp closure and
 # with .dockerignore's whitelist. The CI dockerbuild job builds this image on
-# every branch push, so a missing package fails there rather than at release.
+# main pushes and pull requests, so a missing package fails there rather than
+# at release.
 COPY cmd/krot-cp/ cmd/krot-cp/
 COPY internal/store/ internal/store/
 COPY internal/model/ internal/model/
