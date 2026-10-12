@@ -4,6 +4,21 @@ entries:
   - annotations:
       artifacthub.io/license: AGPL-3.0-or-later
     apiVersion: v2
+    appVersion: 0.4.1
+    created: "2026-10-12T19:32:54.414269805Z"
+    description: 'Krot proxy node agents: sing-box supervised by the control plane'
+    digest: 85b848efdc5318e027f1fa79d3f8c42e84a1586e3a92291d22091b35efafaf3e
+    home: https://github.com/Arsolitt/krot
+    name: krot-agent
+    sources:
+    - https://github.com/Arsolitt/krot
+    type: application
+    urls:
+    - https://github.com/Arsolitt/krot/releases/download/v0.4.1/krot-agent-0.4.1.tgz
+    version: 0.4.1
+  - annotations:
+      artifacthub.io/license: AGPL-3.0-or-later
+    apiVersion: v2
     appVersion: 0.4.0-rc.2
     created: "2026-10-12T19:11:39.731029865Z"
     description: 'Krot proxy node agents: sing-box supervised by the control plane'
@@ -165,6 +180,21 @@ entries:
   - annotations:
       artifacthub.io/license: AGPL-3.0-or-later
     apiVersion: v2
+    appVersion: 0.4.1
+    created: "2026-10-12T19:32:54.414978779Z"
+    description: 'Krot control plane: portal, subscriptions, agent API, identity sync'
+    digest: 5d11aa285ed36f1b08d3c4e62dbf63fb8d6bb510cc7ecc795f9048ee344c8267
+    home: https://github.com/Arsolitt/krot
+    name: krot-control
+    sources:
+    - https://github.com/Arsolitt/krot
+    type: application
+    urls:
+    - https://github.com/Arsolitt/krot/releases/download/v0.4.1/krot-control-0.4.1.tgz
+    version: 0.4.1
+  - annotations:
+      artifacthub.io/license: AGPL-3.0-or-later
+    apiVersion: v2
     appVersion: 0.4.0-rc.2
     created: "2026-10-12T19:11:39.731691282Z"
     description: 'Krot control plane: portal, subscriptions, agent API, identity sync'
@@ -322,4 +352,4 @@ entries:
     urls:
     - https://github.com/Arsolitt/krot/releases/download/v0.1.1/krot-control-0.1.1.tgz
     version: 0.1.1
-generated: "2026-10-12T19:11:39.730273839Z"
+generated: "2026-10-12T19:32:54.413439163Z"
