@@ -20,15 +20,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The Happ management headers (`Profile-Title`, `Profile-Update-Interval`,
   `Support-Url`, `Routing`) are now set and read in canonical spelling:
   identical on the wire — HTTP header names are case-insensitive and Go
-  canonicalizes them anyway — but the canonicalheader linter, stricter in the
-  pinned CI version, rejected the lowercase spelling and failed the release
-  run of v0.4.0.
-- The lint backlog the same stricter run surfaced is cleared: the repeated
+  canonicalizes them anyway — but the canonicalheader check in the pinned
+  golangci-lint v2.13.2 rejected the lowercase spelling while the older local
+  v2.12.2 stayed silent, and the release run of v0.4.0 failed on it.
+- The lint backlog the pinned linter surfaced is cleared: the repeated
   DNS/resolver, protocol and proto3-JSON literals in `internal/render` and
   `internal/zitadel` are named constants, and the byte-slice fixtures in the
   `internal/staticmerge` tests build with `fmt.Appendf` instead of
   `[]byte(fmt.Sprintf(...))`. `golangci-lint run ./cmd/... ./internal/...`
-  reports zero issues under both the local and the pinned CI version.
+  reports zero issues under both v2.12.2 and the pinned v2.13.2.
+
+### Changed
+
+- `make lint` refuses to run when the installed `golangci-lint` version differs
+  from the workflow's `GOLANGCI_LINT_VERSION` pin, naming both versions and the
+  install command: the mismatch is what let a locally green run pass a tree the
+  pinned CI linter then failed.
 
 ## [0.4.0] - 2026-10-12
 
