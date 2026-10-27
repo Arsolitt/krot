@@ -120,7 +120,9 @@ func goldenInbounds(t *testing.T) []model.Inbound {
 // normalizeCertPaths rewrites the hy2 tls certificate paths in a parsed config
 // to a sentinel so golden comparison is exact for everything else. v1 named
 // cert files after the SNI; v2 names them after the inbound tag (collision-
-// free for inbounds sharing an SNI) — the only intentional deviation.
+// free for inbounds sharing an SNI) — one of two intentional deviations, the
+// other being rule-set download detours via http_client.detour rather than
+// v1's download_detour.
 func normalizeCertPaths(t *testing.T, cfg map[string]any) {
 	t.Helper()
 	inbounds, ok := cfg["inbounds"].([]any)

@@ -17,12 +17,12 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o /out/krot-agent ./cmd/k
 FROM alpine:3.20 AS fetch
 
 ARG TARGETARCH
-ENV SINGBOX_VERSION=1.13.18-extended-2.6.5
+ENV SINGBOX_VERSION=1.14.3-extended-2.7.3
 RUN apk add --no-cache curl
 RUN set -eux; \
     case "${TARGETARCH}" in \
-      amd64) echo "9cb62b5e83bd5d6a1f534b57a0f5bcb8de6044a524d193f9c389aeb3a60a2875  sing-box.tar.gz" > /sums ;; \
-      arm64) echo "560730fe1829db1aef6f9e923f0f4cbfb9699b535b203da9a9d24082f392aa70  sing-box.tar.gz" > /sums ;; \
+      amd64) echo "c9fd27564d55b6abc7b21c9fdd1e29dee4834e034aeb6b7b8255055bff46a3f5  sing-box.tar.gz" > /sums ;; \
+      arm64) echo "da50f003ee172ba048068145c6d07db5cc6f1202831a358be549a5f2bb1975a6  sing-box.tar.gz" > /sums ;; \
       *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl -fsSL -o sing-box.tar.gz \

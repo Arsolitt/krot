@@ -151,7 +151,9 @@ func buildDNS() *option.DNSOptions {
 func buildOutbounds() []option.Outbound {
 	opts := option.DirectOutboundOptions{
 		DialerOptions: option.DialerOptions{
-			DomainResolver: &option.DomainResolveOptions{Server: dnsLocalTag},
+			AbstractDialerOptions: option.AbstractDialerOptions{
+				DomainResolver: &option.DomainResolveOptions{Server: dnsLocalTag},
+			},
 		},
 	}
 	return []option.Outbound{{Type: "direct", Tag: directTag, Options: &opts}}
@@ -163,10 +165,10 @@ func buildRoute() *option.RouteOptions {
 	for _, tag := range remoteRuleSets {
 		ruleSets = append(ruleSets, option.RuleSet{
 			Type: "remote",
-			Tag:  tag,
+			Tag:  badoption.Listable[string]{tag},
 			RemoteOptions: option.RemoteRuleSet{
 				URL:            ruleSetURL(tag),
-				DownloadDetour: directTag,
+				HTTPClient:     &option.HTTPClientOptions{DialerOptions: option.DialerOptions{Detour: directTag}},
 				UpdateInterval: badoption.Duration(ruleSetUpdateEvery),
 			},
 		})

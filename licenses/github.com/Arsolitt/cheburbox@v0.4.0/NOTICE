@@ -1,0 +1,257 @@
+cheburbox
+=========
+
+cheburbox is a declarative sing-box configuration generator and validator,
+released as the cheburbox CLI. This file lists the third-party components
+linked into the released binaries and the license files they ship. The full
+text of every third-party license is bundled in licenses/ next to this file.
+
+cheburbox itself is licensed under the GNU General Public License version 3
+(SPDX: GPL-3.0-only, LICENSE).
+
+Third-party components
+======================
+
+filippo.io/edwards25519 v1.2.0 — BSD-3-Clause — licenses/filippo.io/edwards25519/LICENSE
+github.com/AdguardTeam/golibs v0.32.7 — Unlicense — licenses/github.com/AdguardTeam/golibs/LICENSE
+github.com/AliRizaAynaci/gorl/v2 v2.2.0 — MIT — licenses/github.com/AliRizaAynaci/gorl/v2/LICENSE
+github.com/Arsolitt/amnezigo v1.0.0 — GPL-3.0-only — licenses/github.com/Arsolitt/amnezigo/LICENSE, licenses/github.com/Arsolitt/amnezigo/NOTICE
+github.com/OneOfOne/xxhash v1.2.8 — Apache-2.0 — licenses/github.com/OneOfOne/xxhash/LICENSE
+github.com/RyuaNerin/go-krypto v1.3.0 — MIT — licenses/github.com/RyuaNerin/go-krypto/LICENSE
+github.com/ajg/form v1.5.1 — BSD-3-Clause — licenses/github.com/ajg/form/LICENSE
+github.com/ameshkov/dnsstamps v1.0.3 — Unlicense — licenses/github.com/ameshkov/dnsstamps/LICENSE
+github.com/anchore/go-lzo v0.1.0 — MIT — licenses/github.com/anchore/go-lzo/LICENSE
+github.com/andybalholm/brotli v1.2.0 — MIT — licenses/github.com/andybalholm/brotli/LICENSE
+github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be — MIT — licenses/github.com/anmitsu/go-shlex/LICENSE
+github.com/anytls/sing-anytls v0.0.11 — GPL-3.0-or-later — licenses/github.com/anytls/sing-anytls/LICENSE
+github.com/axiomhq/hyperloglog v0.0.0-20240319100328-84253e514e02 — MIT — licenses/github.com/axiomhq/hyperloglog/LICENSE
+github.com/caddyserver/certmagic v0.25.3-0.20260421143802-60d9d8b415d6 — Apache-2.0 — licenses/github.com/caddyserver/certmagic/LICENSE.txt
+github.com/caddyserver/zerossl v0.1.5 — MIT — licenses/github.com/caddyserver/zerossl/LICENSE
+github.com/cespare/xxhash/v2 v2.3.0 — MIT — licenses/github.com/cespare/xxhash/v2/LICENSE.txt
+github.com/coder/websocket v1.8.14 — ISC — licenses/github.com/coder/websocket/LICENSE.txt
+github.com/coreos/go-iptables v0.7.1-0.20240112124308-65c67c9f46e6 — Apache-2.0 — licenses/github.com/coreos/go-iptables/LICENSE, licenses/github.com/coreos/go-iptables/NOTICE
+github.com/creack/pty v1.1.24 — MIT — licenses/github.com/creack/pty/LICENSE
+github.com/cretz/bine v0.2.0 — MIT — licenses/github.com/cretz/bine/LICENSE
+github.com/database64128/netx-go v0.1.1 — BSD-3-Clause — licenses/github.com/database64128/netx-go/LICENSE
+github.com/database64128/tfo-go/v2 v2.3.2 — MIT — licenses/github.com/database64128/tfo-go/v2/LICENSE
+github.com/dgryski/go-camellia v0.0.0-20191119043421-69a8a13fb23d — MIT — licenses/github.com/dgryski/go-camellia/LICENSE
+github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc — MIT — licenses/github.com/dgryski/go-metro/LICENSE
+github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f — MIT — licenses/github.com/dgryski/go-rendezvous/LICENSE
+github.com/dunglas/httpsfv v1.1.0 — BSD-3-Clause — licenses/github.com/dunglas/httpsfv/LICENSE
+github.com/enfein/mieru/v3 v3.33.0 — GPL-3.0-only — licenses/github.com/enfein/mieru/v3/LICENSE
+github.com/florianl/go-nfqueue/v2 v2.1.0 — MIT — licenses/github.com/florianl/go-nfqueue/v2/LICENSE
+github.com/fsnotify/fsnotify v1.9.0 — BSD-3-Clause — licenses/github.com/fsnotify/fsnotify/LICENSE
+github.com/fxamacker/cbor/v2 v2.9.0 — MIT — licenses/github.com/fxamacker/cbor/v2/LICENSE
+github.com/gaissmai/bart v0.26.1 — MIT — licenses/github.com/gaissmai/bart/LICENSE
+github.com/go-chi/chi/v5 v5.2.5 — MIT — licenses/github.com/go-chi/chi/v5/LICENSE
+github.com/go-chi/render v1.0.3 — MIT — licenses/github.com/go-chi/render/LICENSE
+github.com/go4org/hashtriemap v0.0.0-20251130024219-545ba229f689 — BSD-3-Clause — licenses/github.com/go4org/hashtriemap/LICENSE
+github.com/gobwas/httphead v0.1.0 — MIT — licenses/github.com/gobwas/httphead/LICENSE
+github.com/gobwas/pool v0.2.1 — MIT — licenses/github.com/gobwas/pool/LICENSE
+github.com/gobwas/ws v1.4.0 — MIT — licenses/github.com/gobwas/ws/LICENSE
+github.com/godbus/dbus/v5 v5.2.2 — BSD-2-Clause — licenses/github.com/godbus/dbus/v5/LICENSE
+github.com/gofrs/uuid/v5 v5.5.1 — MIT — licenses/github.com/gofrs/uuid/v5/LICENSE
+github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 — Apache-2.0 — licenses/github.com/golang/groupcache/LICENSE
+github.com/google/btree v1.1.3 — Apache-2.0 — licenses/github.com/google/btree/LICENSE
+github.com/google/certificate-transparency-go v1.3.2 — Apache-2.0 — licenses/github.com/google/certificate-transparency-go/AUTHORS, licenses/github.com/google/certificate-transparency-go/LICENSE
+github.com/google/go-jsonnet v0.22.0 — Apache-2.0 — licenses/github.com/google/go-jsonnet/LICENSE
+github.com/google/gopacket v1.1.19 — BSD-3-Clause — licenses/github.com/google/gopacket/AUTHORS, licenses/github.com/google/gopacket/LICENSE
+github.com/google/nftables v0.2.1-0.20240414091927-5e242ec57806 — Apache-2.0 — licenses/github.com/google/nftables/LICENSE
+github.com/hashicorp/yamux v0.1.2 — MPL-2.0 — licenses/github.com/hashicorp/yamux/LICENSE
+github.com/hdevalence/ed25519consensus v0.2.0 — BSD-3-Clause — licenses/github.com/hdevalence/ed25519consensus/LICENSE
+github.com/huin/goupnp v1.3.0 — BSD-2-Clause — licenses/github.com/huin/goupnp/LICENSE
+github.com/insomniacslk/dhcp v0.0.0-20260220084031-5adc3eb26f91 — BSD-3-Clause — licenses/github.com/insomniacslk/dhcp/LICENSE
+github.com/jackpal/go-nat-pmp v1.0.2 — Apache-2.0 — licenses/github.com/jackpal/go-nat-pmp/LICENSE
+github.com/jsimonetti/rtnetlink v1.4.1 — MIT — licenses/github.com/jsimonetti/rtnetlink/LICENSE.md
+github.com/klauspost/compress v1.19.1 — Apache-2.0 AND BSD-3-Clause AND MIT — licenses/github.com/klauspost/compress/LICENSE
+github.com/klauspost/cpuid/v2 v2.3.0 — MIT — licenses/github.com/klauspost/cpuid/v2/LICENSE
+github.com/koron/go-ssdp v0.0.4 — MIT — licenses/github.com/koron/go-ssdp/LICENSE
+github.com/kr/fs v0.1.0 — BSD-3-Clause — licenses/github.com/kr/fs/LICENSE
+github.com/libdns/acmedns v0.5.0 — MIT — licenses/github.com/libdns/acmedns/LICENSE
+github.com/libdns/alidns v1.0.6 — MIT — licenses/github.com/libdns/alidns/LICENSE
+github.com/libdns/cloudflare v0.2.2 — MIT — licenses/github.com/libdns/cloudflare/LICENSE
+github.com/libdns/libdns v1.1.1 — MIT — licenses/github.com/libdns/libdns/LICENSE
+github.com/libp2p/go-nat v1.0.1-0.20250821073202-01afc089f138 — Apache-2.0 — licenses/github.com/libp2p/go-nat/LICENSE
+github.com/libp2p/go-netroute v0.2.1 — BSD-3-Clause — licenses/github.com/libp2p/go-netroute/LICENSE
+github.com/logrusorgru/aurora v2.0.3+incompatible — Unlicense — licenses/github.com/logrusorgru/aurora/AUTHORS.md, licenses/github.com/logrusorgru/aurora/LICENSE
+github.com/mdlayher/netlink v1.11.2 — MIT — licenses/github.com/mdlayher/netlink/LICENSE.md
+github.com/mdlayher/socket v0.6.0 — MIT — licenses/github.com/mdlayher/socket/LICENSE.md
+github.com/metacubex/utls v1.8.7 — BSD-3-Clause — licenses/github.com/metacubex/utls/LICENSE
+github.com/mholt/acmez/v3 v3.1.6 — Apache-2.0 — licenses/github.com/mholt/acmez/v3/LICENSE
+github.com/miekg/dns v1.1.72 — BSD-3-Clause — licenses/github.com/miekg/dns/AUTHORS, licenses/github.com/miekg/dns/LICENSE
+github.com/mitchellh/go-ps v1.0.0 — MIT — licenses/github.com/mitchellh/go-ps/LICENSE.md
+github.com/panjf2000/ants/v2 v2.12.0 — MIT — licenses/github.com/panjf2000/ants/v2/LICENSE
+github.com/pierrec/lz4/v4 v4.1.26 — BSD-3-Clause — licenses/github.com/pierrec/lz4/v4/LICENSE
+github.com/pires/go-proxyproto v0.11.0 — Apache-2.0 — licenses/github.com/pires/go-proxyproto/LICENSE
+github.com/pkg/sftp v1.13.10 — BSD-2-Clause — licenses/github.com/pkg/sftp/LICENSE
+github.com/quic-go/qpack v0.6.0 — MIT — licenses/github.com/quic-go/qpack/LICENSE.md
+github.com/quic-go/quic-go v0.60.0 — MIT — licenses/github.com/quic-go/quic-go/LICENSE
+github.com/redis/go-redis/v9 v9.8.0 — BSD-2-Clause — licenses/github.com/redis/go-redis/v9/LICENSE
+github.com/safchain/ethtool v0.3.0 — Apache-2.0 — licenses/github.com/safchain/ethtool/LICENSE
+github.com/sagernet/bbolt v0.0.0-20260823094646-e24805439c9c — MIT — licenses/github.com/sagernet/bbolt/LICENSE
+github.com/sagernet/cors v1.2.1 — MIT — licenses/github.com/sagernet/cors/LICENSE
+github.com/sagernet/fswatch v0.1.2 — GPL-3.0-or-later — licenses/github.com/sagernet/fswatch/LICENSE
+github.com/sagernet/gliderssh v0.3.4-0.20260531100337-2194faca5648 — BSD-3-Clause — licenses/github.com/sagernet/gliderssh/LICENSE
+github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 — Apache-2.0 AND BSD-3-Clause AND MIT — licenses/github.com/sagernet/gvisor/AUTHORS, licenses/github.com/sagernet/gvisor/LICENSE
+github.com/sagernet/netlink v0.0.0-20260814022025-64455d367bbf — Apache-2.0 — licenses/github.com/sagernet/netlink/LICENSE
+github.com/sagernet/nftables v0.3.0-mod.4 — Apache-2.0 — licenses/github.com/sagernet/nftables/LICENSE
+github.com/sagernet/quic-go v0.61.0-sing-box-mod.7 — MIT — licenses/github.com/sagernet/quic-go/LICENSE
+github.com/sagernet/sing-openvpn v0.0.0-20260729104525-103eb5fe5eb6 — GPL-3.0-or-later — licenses/github.com/sagernet/sing-openvpn/LICENSE
+github.com/sagernet/sing-quic v0.7.0 — GPL-3.0-or-later — licenses/github.com/sagernet/sing-quic/LICENSE
+github.com/sagernet/sing-shadowsocks v0.2.8 — GPL-3.0-or-later — licenses/github.com/sagernet/sing-shadowsocks/LICENSE
+github.com/sagernet/sing-shadowsocks2 v0.2.1 — GPL-3.0-or-later — licenses/github.com/sagernet/sing-shadowsocks2/LICENSE
+github.com/sagernet/sing-shadowtls v0.2.1 — GPL-3.0-or-later — licenses/github.com/sagernet/sing-shadowtls/LICENSE
+github.com/sagernet/sing-snell v0.0.0-20260829071736-20f2eaec77c3 — GPL-3.0-or-later — licenses/github.com/sagernet/sing-snell/LICENSE
+github.com/sagernet/sing-tun v0.9.3 — GPL-3.0-or-later — licenses/github.com/sagernet/sing-tun/LICENSE
+github.com/sagernet/smux v1.5.50-sing-box-mod.1 — MIT — licenses/github.com/sagernet/smux/LICENSE
+github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854 — MIT — licenses/github.com/sagernet/ws/LICENSE
+github.com/shtorm-7/connect-ip-go v1.0.0-extended-1.1.1 — MIT — licenses/github.com/shtorm-7/connect-ip-go/LICENSE
+github.com/shtorm-7/dnscrypt/v2 v2.4.0-extended-1.0.0 — Unlicense — licenses/github.com/shtorm-7/dnscrypt/v2/LICENSE
+github.com/shtorm-7/go-cache/v2 v2.1.0-extended-1.2.0 — MIT — licenses/github.com/shtorm-7/go-cache/v2/LICENSE
+github.com/shtorm-7/mtg-multi v1.11.0-extended-1.0.0 — MIT — licenses/github.com/shtorm-7/mtg-multi/LICENSE
+github.com/shtorm-7/rmux v1.0.1 — MIT — licenses/github.com/shtorm-7/rmux/LICENSE
+github.com/shtorm-7/sing v0.9.0-beta.4-extended-1.2.1 — GPL-3.0-or-later — licenses/github.com/shtorm-7/sing/LICENSE
+github.com/shtorm-7/sing-box-extended v1.14.1-extended-2.7.2 — GPL-3.0-or-later — licenses/github.com/shtorm-7/sing-box-extended/LICENSE
+github.com/shtorm-7/sing-mux v0.3.5-extended-1.0.0 — GPL-3.0-or-later — licenses/github.com/shtorm-7/sing-mux/LICENSE
+github.com/shtorm-7/sing-vmess v0.2.8-extended-1.0.0 — GPL-3.0-or-later — licenses/github.com/shtorm-7/sing-vmess/LICENSE
+github.com/shtorm-7/tailscale v1.102.1-sing-box-1.14-mod.5-extended-1.0.3 — BSD-3-Clause — licenses/github.com/shtorm-7/tailscale/LICENSE, licenses/github.com/shtorm-7/tailscale/PATENTS
+github.com/shtorm-7/wireguard-go v0.0.6-extended-1.6.1 — MIT — licenses/github.com/shtorm-7/wireguard-go/LICENSE
+github.com/spf13/cobra v1.10.2 — Apache-2.0 — licenses/github.com/spf13/cobra/LICENSE.txt
+github.com/spf13/pflag v1.0.10 — BSD-3-Clause — licenses/github.com/spf13/pflag/LICENSE
+github.com/tailscale/hujson v0.0.0-20260302212456-ecc657c15afd — BSD-3-Clause — licenses/github.com/tailscale/hujson/LICENSE
+github.com/tailscale/netlink v1.1.1-0.20240822203006-4d49adab4de7 — Apache-2.0 — licenses/github.com/tailscale/netlink/LICENSE
+github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc — BSD-3-Clause — licenses/github.com/tailscale/peercred/AUTHORS, licenses/github.com/tailscale/peercred/LICENSE
+github.com/tailscale/web-client-prebuilt v0.0.0-20250124233751-d4cd19a26976 — BSD-3-Clause — licenses/github.com/tailscale/web-client-prebuilt/LICENSE
+github.com/tjfoc/gmsm v1.4.1 — Apache-2.0 — licenses/github.com/tjfoc/gmsm/LICENSE
+github.com/tylertreat/BoomFilters v0.0.0-20251117164519-53813c36cc1b — Apache-2.0 — licenses/github.com/tylertreat/BoomFilters/LICENSE
+github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 — BSD-3-Clause — licenses/github.com/u-root/uio/LICENSE
+github.com/vishvananda/netns v0.0.5 — Apache-2.0 — licenses/github.com/vishvananda/netns/LICENSE
+github.com/x448/float16 v0.8.4 — MIT — licenses/github.com/x448/float16/LICENSE
+github.com/yosida95/uritemplate/v3 v3.0.2 — BSD-3-Clause — licenses/github.com/yosida95/uritemplate/v3/LICENSE
+github.com/zeebo/blake3 v0.2.4 — CC0-1.0 — licenses/github.com/zeebo/blake3/LICENSE
+go.uber.org/multierr v1.11.0 — MIT — licenses/go.uber.org/multierr/LICENSE.txt
+go.uber.org/zap v1.28.0 — MIT — licenses/go.uber.org/zap/LICENSE
+go.uber.org/zap/exp v0.3.0 — MIT — licenses/go.uber.org/zap/exp/LICENSE
+go.yaml.in/yaml/v2 v2.4.4 — Apache-2.0 AND MIT — licenses/go.yaml.in/yaml/v2/LICENSE, licenses/go.yaml.in/yaml/v2/LICENSE.libyaml, licenses/go.yaml.in/yaml/v2/NOTICE
+go4.org/mem v0.0.0-20240501181205-ae6ca9944745 — Apache-2.0 — licenses/go4.org/mem/LICENSE
+go4.org/netipx v0.0.0-20231129151722-fdeea329fbba — BSD-3-Clause — licenses/go4.org/netipx/AUTHORS, licenses/go4.org/netipx/LICENSE
+golang.org/x/crypto v0.57.0 — BSD-3-Clause — licenses/golang.org/x/crypto/LICENSE, licenses/golang.org/x/crypto/PATENTS
+golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f — BSD-3-Clause — licenses/golang.org/x/exp/LICENSE, licenses/golang.org/x/exp/PATENTS
+golang.org/x/mod v0.41.0 — BSD-3-Clause — licenses/golang.org/x/mod/LICENSE, licenses/golang.org/x/mod/PATENTS
+golang.org/x/net v0.58.0 — BSD-3-Clause — licenses/golang.org/x/net/LICENSE, licenses/golang.org/x/net/PATENTS
+golang.org/x/oauth2 v0.36.0 — BSD-3-Clause — licenses/golang.org/x/oauth2/LICENSE
+golang.org/x/sync v0.23.0 — BSD-3-Clause — licenses/golang.org/x/sync/LICENSE, licenses/golang.org/x/sync/PATENTS
+golang.org/x/sys v0.48.0 — BSD-3-Clause — licenses/golang.org/x/sys/LICENSE, licenses/golang.org/x/sys/PATENTS
+golang.org/x/term v0.46.0 — BSD-3-Clause — licenses/golang.org/x/term/LICENSE, licenses/golang.org/x/term/PATENTS
+golang.org/x/text v0.42.0 — BSD-3-Clause — licenses/golang.org/x/text/LICENSE, licenses/golang.org/x/text/PATENTS
+golang.org/x/time v0.15.0 — BSD-3-Clause — licenses/golang.org/x/time/LICENSE, licenses/golang.org/x/time/PATENTS
+golang.zx2c4.com/wireguard/wgctrl v0.0.0-20241231184526-a9ab2273dd10 — MIT — licenses/golang.zx2c4.com/wireguard/wgctrl/LICENSE.md
+google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 — Apache-2.0 — licenses/google.golang.org/genproto/googleapis/rpc/LICENSE
+google.golang.org/grpc v1.79.1 — Apache-2.0 — licenses/google.golang.org/grpc/AUTHORS, licenses/google.golang.org/grpc/LICENSE, licenses/google.golang.org/grpc/NOTICE.txt
+google.golang.org/protobuf v1.36.11 — BSD-3-Clause — licenses/google.golang.org/protobuf/LICENSE, licenses/google.golang.org/protobuf/PATENTS
+gopkg.in/yaml.v3 v3.0.1 — Apache-2.0 AND MIT — licenses/gopkg.in/yaml.v3/LICENSE, licenses/gopkg.in/yaml.v3/NOTICE
+lukechampine.com/blake3 v1.4.1 — MIT — licenses/lukechampine.com/blake3/LICENSE
+sigs.k8s.io/yaml v1.6.0 — Apache-2.0 AND BSD-3-Clause AND MIT — licenses/sigs.k8s.io/yaml/LICENSE
+
+Third-party attribution notices
+===============================
+
+## github.com/Arsolitt/amnezigo v1.0.0
+
+amnezigo
+========
+
+amnezigo is a declarative AmneziaWG v3.1 configuration generator, released as
+the amnezigo CLI and as a Go library. This file lists the third-party
+components linked into the released binaries and the license files they ship.
+The full text of every third-party license is bundled in licenses/ next to this
+file.
+
+amnezigo itself is licensed under the GNU General Public License version 3
+(SPDX: GPL-3.0-only, LICENSE).
+
+Third-party components
+======================
+
+github.com/google/go-jsonnet v0.22.0 — Apache-2.0 — licenses/github.com/google/go-jsonnet/LICENSE
+github.com/spf13/cobra v1.10.2 — Apache-2.0 — licenses/github.com/spf13/cobra/LICENSE.txt
+github.com/spf13/pflag v1.0.10 — BSD-3-Clause — licenses/github.com/spf13/pflag/LICENSE
+go.yaml.in/yaml/v2 v2.4.4 — Apache-2.0 AND MIT — licenses/go.yaml.in/yaml/v2/LICENSE, licenses/go.yaml.in/yaml/v2/LICENSE.libyaml, licenses/go.yaml.in/yaml/v2/NOTICE
+golang.org/x/crypto v0.57.0 — BSD-3-Clause — licenses/golang.org/x/crypto/LICENSE, licenses/golang.org/x/crypto/PATENTS
+golang.org/x/sys v0.48.0 — BSD-3-Clause — licenses/golang.org/x/sys/LICENSE, licenses/golang.org/x/sys/PATENTS
+sigs.k8s.io/yaml v1.6.0 — Apache-2.0 AND BSD-3-Clause AND MIT — licenses/sigs.k8s.io/yaml/LICENSE
+
+Third-party attribution notices
+===============================
+
+## go.yaml.in/yaml/v2 v2.4.4
+
+Copyright 2011-2016 Canonical Ltd.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+## github.com/coreos/go-iptables v0.7.1-0.20240112124308-65c67c9f46e6
+
+CoreOS Project
+Copyright 2018 CoreOS, Inc
+
+This product includes software developed at CoreOS, Inc.
+(http://www.coreos.com/).
+
+## go.yaml.in/yaml/v2 v2.4.4
+
+Copyright 2011-2016 Canonical Ltd.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+## google.golang.org/grpc v1.79.1
+
+Copyright 2014 gRPC authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+## gopkg.in/yaml.v3 v3.0.1
+
+Copyright 2011-2016 Canonical Ltd.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.

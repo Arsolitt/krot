@@ -135,98 +135,98 @@
         "type": "remote",
         "tag": "geosite-category-ads-all",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-ads-all.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-category-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-category-bank-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-bank-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-category-ecommerce-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-ecommerce-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-category-entertainment-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-entertainment-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-category-gov-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-gov-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-category-media-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-media-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-category-travel-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-category-travel-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-dzen",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-dzen.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-ozon",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-ozon.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-mailru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-mailru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geosite-mailru-group",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geosite-mailru-group.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "geoip-ru",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/sagernet-geoip-ru.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       },
       {
         "type": "remote",
         "tag": "russia-outside",
         "url": "https://raw.githubusercontent.com/Arsolitt/sing-box-rules/rule-set/itdog-russia_outside.srs",
-        "download_detour": "direct",
+        "http_client": { "detour": "direct" },
         "update_interval": "24h0m0s"
       }
     ],
