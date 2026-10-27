@@ -13,6 +13,23 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-10-27
+
+### Changed
+
+- The sing-box-extended library pin moves to the 1.14 line:
+  `v1.13.14-extended-2.5.0` → `v1.14.3-extended-2.7.3`, with the mirrored
+  replace set (sing, wireguard-go, tailscale, sing-mux, sing-vmess, mtg-multi,
+  connect-ip-go) and amnezigo v1.0.0 along for the ride.
+- cheburbox moves v0.2.1 → v0.4.0: the previous release does not compile
+  against sing-box 1.14's option API, so the two bumps are one change.
+- The agent image ships the `1.14.3-extended-2.7.3` sing-box binary
+  (was `1.13.18-extended-2.6.5`).
+- Remote rule-set downloads in rendered configs carry the detour as
+  `http_client.detour` instead of the `download_detour` field deprecated in
+  sing-box 1.14 and removed in 1.16; the shipped binary validates the rendered
+  config with zero deprecation output.
+
 ## [0.4.1] - 2026-10-12
 
 ### Fixed
