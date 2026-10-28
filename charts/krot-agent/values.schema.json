@@ -9,6 +9,7 @@
     "cpUrl",
     "agentTokenSecretName",
     "nodes",
+    "service",
     "wsIngress",
     "gatewayAPI",
     "resources"
@@ -230,6 +231,10 @@
       "description": "Secret holding the registration token under key 'token'. The key is required; an empty name is refused by the template, because it renders a secretKeyRef the API server refuses.",
       "type": "string"
     },
+    "hostNetwork": {
+      "description": "Network namespace of the agent pods. true keeps the historical hostNetwork shape with Recreate strategy (port collisions on the pinned node block rolling updates); false renders pod-network pods whose updates roll, with listeners fronted by the per-node Services.",
+      "type": "boolean"
+    },
     "dnsPolicy": {
       "description": "Pod DNS policy. The agent pods are hostNetwork, so ClusterFirst resolves nothing; Default means the node's resolv.conf and ClusterFirstWithHostNet means cluster DNS.",
       "type": "string",
@@ -247,14 +252,51 @@
         "$ref": "#/definitions/nodeSpec"
       }
     },
+    "service": {
+      "description": "Strategic merge applied to every per-node Service rendered for vless_ws inbounds, nats loadMergePatch semantics: nested maps deep-merge, lists replace wholesale. Empty merge leaves the Services exactly as previous chart versions rendered them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "merge"
+      ],
+      "properties": {
+        "merge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "annotations": {
+                  "$ref": "#/definitions/stringMap"
+                },
+                "labels": {
+                  "$ref": "#/definitions/stringMap"
+                }
+              }
+            },
+            "spec": {
+              "description": "Verbatim Service spec overlay (type, loadBalancerClass, externalTrafficPolicy, allocateLoadBalancerNodePorts, ...). Deep-merges over the chart-derived spec; a ports/selector list replaces the chart-derived one wholesale. Left open like the control chart's config passthrough: the fields are the Kubernetes API's own, checked by kubeconform and the API server, not re-modeled here.",
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
     "wsIngress": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "className"
+        "enabled"
       ],
       "properties": {
+        "enabled": {
+          "description": "false renders no Ingress objects - for installs fronted from another cluster; the per-node Services still render.",
+          "type": "boolean"
+        },
         "className": {
+          "description": "Ingress class. Required by the template whenever Ingress objects render: an empty class renders an Ingress no controller claims.",
           "type": "string"
         },
         "tlsSecretName": {

@@ -576,13 +576,16 @@ helm install krot-agent charts/krot-agent \
 
 Notes for `charts/krot-agent`:
 
-- One Deployment and one spec ConfigMap per entry of `nodes`; the agent pod is
-  `hostNetwork` with `Recreate` strategy, so a rolling update never collides on
-  the node ports.
+- One Deployment and one spec ConfigMap per entry of `nodes`. The default
+  `hostNetwork: true` keeps the agent pod in the node's network namespace
+  binding inbound listeners on node ports, with `Recreate` strategy - two pods
+  cannot share the ports during a rolling update on the pinned node;
+  `hostNetwork: false` renders pod-network pods whose updates roll, with the
+  listeners fronted by the per-node Services.
 - `agentTokenSecretName` (default `krot-agent`, key `token`) holds the agent's
   `KROT_AGENT_TOKEN`; `cpUrl` is the control-plane base URL; `dnsPolicy`
   defaults to `Default` (use `ClusterFirstWithHostNet` when `cpUrl` points at
-  an in-cluster Service).
+  an in-cluster Service, or `ClusterFirst` when `hostNetwork: false`).
 `nodes[]` entries:
 
 | Field | Description |
@@ -597,7 +600,35 @@ Notes for `charts/krot-agent`:
 - `inbounds` of type `vless_ws` additionally get a Service and an Ingress
   (`wsIngress.className`, `wsIngress.tlsSecretName`, `wsIngress.readTimeout`),
   so a CDN edge can reach the agent through the cluster ingress instead of
-  node ports.
+  node ports. The Ingress renders only when `wsIngress.enabled` (default
+  `true`); `enabled: false` renders no Ingress - for installs fronted from
+  another cluster (the chart cannot render objects into a cluster it is not
+  installed in; the fronting Ingress lives next to that cluster's edge).
+- `service.merge` (default `{}`) is a strategic merge applied to every
+  per-node Service rendered for `vless_ws` inbounds - nats `loadMergePatch`
+  semantics: nested maps deep-merge, lists replace wholesale; empty leaves
+  the Services exactly as rendered. The nylon-lb mesh-VIP fleet shape - one
+  dynamically allocated VIP per node (`nylon.io/lb-pool`; the controller
+  picks the lowest free IP and publishes it on the Service's
+  `status.loadBalancer.ingress`), announced from nodes with ready endpoints
+  only (`externalTrafficPolicy: Local` + `nylon.io/announce: single`), and
+  mesh-only (`allocateLoadBalancerNodePorts: false` keeps a random nodePort
+  off every public NIC):
+
+  ```yaml
+  service:
+    merge:
+      metadata:
+        annotations:
+          nylon.io/lb-pool: shared
+          nylon.io/announce: single
+      spec:
+        type: LoadBalancer
+        loadBalancerClass: nylon
+        externalTrafficPolicy: Local
+        allocateLoadBalancerNodePorts: false
+  ```
+
 - `gatewayAPI.enabled` defaults to `false` and is the Gateway API alternative
   to `wsIngress`: every (node, `vless_ws` inbound) pair gets an HTTPRoute on
   the node's Service — hostname `sni`, path `wsPath` (default `/`) —

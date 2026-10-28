@@ -1,0 +1,23 @@
+# MUST be rejected: hostNetwork is a boolean. A string "false" is truthy to
+# Helm's if, so it would silently render hostNetwork pods from an install
+# that asked for the pod network.
+hostNetwork: "false"
+
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+
+wsIngress:
+  enabled: false
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

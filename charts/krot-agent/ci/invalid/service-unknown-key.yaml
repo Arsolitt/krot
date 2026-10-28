@@ -1,0 +1,24 @@
+# MUST be rejected: service accepts only the merge key. A typo'd sibling
+# would silently configure nothing.
+service:
+  merge: {}
+  mergeX: {}
+
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-in, type: vless_reality, listenPort: 8443, sni: cdn.ci.example}
+
+wsIngress:
+  enabled: false
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

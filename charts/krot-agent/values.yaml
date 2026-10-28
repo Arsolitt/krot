@@ -21,7 +21,15 @@ pollInterval: 60s
 # Secret holding the registration token under key "token".
 agentTokenSecretName: krot-agent
 
-# Pod DNS policy. Agents are hostNetwork, so the cluster default (ClusterFirst)
+# Agent pod network. true (default) keeps the historical shape: pods share the
+# node's network namespace and bind inbound listeners on node ports, so the
+# Deployment pins strategy Recreate - two pods cannot share the ports during a
+# rolling update on the pinned node. false renders plain pod-network pods,
+# drops the Recreate pin (updates roll) and fronts the listeners with the
+# per-node Services instead of node ports.
+hostNetwork: true
+
+# Pod DNS policy. Agents are hostNetwork by default, so the cluster default (ClusterFirst)
 # resolves nothing; "Default" means the node's own resolv.conf and
 # "ClusterFirstWithHostNet" means cluster DNS (CoreDNS). Use the latter when
 # cpUrl points at an in-cluster Service, e.g.
@@ -45,11 +53,36 @@ dnsPolicy: Default
 #          publicEndpoint: front.example.org, publicPort: 443, wsPath: /up, originTls: false}
 nodes: []
 
+# Strategic merge applied to every per-node Service rendered for vless_ws
+# inbounds (nats loadMergePatch semantics: nested maps deep-merge, lists
+# replace wholesale; empty leaves the Services exactly as rendered). The
+# nylon-lb mesh-VIP fleet shape - one dynamically allocated VIP per node,
+# mesh-only (no nodePort on public NICs), announced from nodes with ready
+# endpoints only:
+#
+#   service:
+#     merge:
+#       metadata:
+#         annotations:
+#           nylon.io/lb-pool: shared
+#           nylon.io/announce: single
+#       spec:
+#         type: LoadBalancer
+#         loadBalancerClass: nylon
+#         externalTrafficPolicy: Local
+#         allocateLoadBalancerNodePorts: false
+service:
+  merge: {}
+
 # CDN-fronted vless_ws inbounds get a Service and an Ingress route so a
 # reverse-proxy edge (DDoS-Guard) can reach the agent through the cluster
 # ingress instead of node ports. TLS terminates on the edge and again here.
 # tlsSecretName empty renders those Ingress objects without a tls block.
+# enabled false renders no Ingress objects at all - for installs fronted from
+# another cluster, where the real Ingress lives next to that cluster's edge
+# and only the per-node Services are wanted here.
 wsIngress:
+  enabled: true
   className: nginx
   tlsSecretName: ""
   readTimeout: "3600"

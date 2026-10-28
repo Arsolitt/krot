@@ -1,0 +1,27 @@
+# MUST fail the render (not the schema): an enabled wsIngress with an empty
+# className would render Ingress objects no controller claims. The schema
+# requires only wsIngress.enabled, so an explicitly empty className reaches
+# the template and the template refuses it - the same guard
+# gatewayAPI.gatewayName has.
+#
+# expect-error: wsIngress.className is required
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+
+cpUrl: http://krot-cp:8080
+agentTokenSecretName: krot-agent
+
+wsIngress:
+  enabled: true
+  className: ""
+
+nodes:
+  - name: vpn1
+    endpoint: vpn1.ci.example
+    inbounds:
+      - {tag: vless-ws, type: vless_ws, listenPort: 9443, sni: front.ci.example,
+         publicEndpoint: front.ci.example, publicPort: 443, wsPath: /up, originTls: false}
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

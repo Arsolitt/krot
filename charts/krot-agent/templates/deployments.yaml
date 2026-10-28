@@ -7,9 +7,11 @@ metadata:
     app.kubernetes.io/name: krot-agent
     app.kubernetes.io/instance: krot-agent-{{ .name }}
 spec:
+{{- if $.Values.hostNetwork }}
   # hostNetwork port collisions block rolling updates on the pinned node.
   strategy:
     type: Recreate
+{{- end }}
   replicas: 1
   selector:
     matchLabels:
@@ -40,7 +42,9 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- if $.Values.hostNetwork }}
       hostNetwork: true
+{{- end }}
       dnsPolicy: {{ default "Default" $.Values.dnsPolicy | quote }}
       securityContext:
         fsGroup: 2222

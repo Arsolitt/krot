@@ -1,0 +1,60 @@
+# Scenario: agents in the pod network, every per-node Service a LoadBalancer
+# carrying a nylon-lb mesh VIP, no chart-rendered Ingress (the fronting edge
+# lives in another cluster, which the chart cannot render objects into).
+#
+# hostNetwork false drops the hostNetwork field and the Recreate pin, so
+# updates roll. The merged Service shape is the fleet pattern: mesh-only VIP
+# (allocateLoadBalancerNodePorts false keeps a random nodePort off every
+# public NIC), announced from nodes with ready endpoints only
+# (externalTrafficPolicy Local + nylon.io/announce: single). Both nodes carry
+# a vless_ws inbound, so the merge must land on every per-node Service.
+image:
+  repository: ghcr.io/arsolitt/krot-agent
+  tag: ""
+  pullPolicy: IfNotPresent
+
+cpUrl: http://krot-cp:8080
+pollInterval: 60s
+agentTokenSecretName: krot-agent
+hostNetwork: false
+dnsPolicy: ClusterFirst
+
+service:
+  merge:
+    metadata:
+      annotations:
+        nylon.io/lb-pool: shared
+        nylon.io/announce: single
+    spec:
+      type: LoadBalancer
+      loadBalancerClass: nylon
+      externalTrafficPolicy: Local
+      allocateLoadBalancerNodePorts: false
+
+wsIngress:
+  enabled: false
+
+nodes:
+  - name: vpn1
+    node: worker-1
+    endpoint: vpn1.ci.example
+    routeProfile: proxy-server
+    inbounds:
+      - tag: vless-ws-ddg
+        type: vless_ws
+        listenPort: 9443
+        sni: front.ci.example
+        publicEndpoint: front.ci.example
+        publicPort: 443
+        wsPath: /up
+        originTls: false
+  - name: vpn2
+    node: worker-2
+    endpoint: vpn2.ci.example
+    inbounds:
+      - {tag: vless-ws, type: vless_ws, listenPort: 9443, sni: front2.ci.example,
+         publicEndpoint: front2.ci.example, publicPort: 443, wsPath: /up, originTls: false}
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}

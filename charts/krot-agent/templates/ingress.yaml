@@ -1,3 +1,4 @@
+{{- if .Values.wsIngress.enabled }}
 {{- $cfg := .Values.wsIngress }}
 {{- range $node := .Values.nodes }}
 {{- range $in := $node.inbounds }}
@@ -14,7 +15,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: {{ $cfg.readTimeout | quote }}
     nginx.ingress.kubernetes.io/proxy-send-timeout: {{ $cfg.readTimeout | quote }}
 spec:
-  ingressClassName: {{ $cfg.className }}
+  ingressClassName: {{ required "wsIngress.className is required when wsIngress.enabled is true" $cfg.className }}
   {{- with $cfg.tlsSecretName }}
   tls:
     - hosts:
@@ -33,6 +34,7 @@ spec:
                 port:
                   number: {{ $in.listenPort }}
 ---
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
