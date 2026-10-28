@@ -13,6 +13,23 @@ tag of the version; its heading date is the day the section was opened.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] - 2026-10-28
+
+### Added
+
+- `charts/krot-agent` grows a pod-network mode: `hostNetwork: false` drops
+  the hostNetwork field and the Recreate strategy pin, so agent updates roll
+  behind the per-node Services instead of colliding on the node ports.
+- `service.merge` strategically merges every per-node Service rendered for
+  `vless_ws` inbounds (nats `loadMergePatch` semantics: nested maps deep-merge,
+  lists replace wholesale) - the way a Service becomes a nylon-lb mesh VIP
+  (`type: LoadBalancer` + `loadBalancerClass: nylon`, mesh-only and announce
+  annotations) without the chart modeling every LB flavor.
+- `wsIngress.enabled: false` renders no Ingress objects, for installs fronted
+  from another cluster where the real Ingress lives next to that cluster's
+  edge. An enabled-but-empty `wsIngress.className` is now refused by the
+  template instead of rendering an Ingress no controller claims.
+
 ## [0.5.0] - 2026-10-27
 
 ### Changed
